@@ -10,7 +10,7 @@ func main() {
 	// open the pdf
 	reader, err := pdf.Open(os.Args[1])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
+		fmt.Fprintln(os.Stderr, err)
 		return
 	}
 	defer reader.Close()
