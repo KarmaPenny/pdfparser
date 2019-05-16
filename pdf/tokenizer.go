@@ -101,7 +101,7 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 					}
 
 					// convert code into byte
-					val, err := strconv.ParseInt(string(code.Bytes()), 8, 16)
+					val, err := strconv.ParseUint(string(code.Bytes()), 8, 8)
 					if err != nil {
 						return nil, err
 					}
@@ -160,7 +160,7 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 				}
 
 				// convert the hex code to a byte
-				val, err := strconv.ParseInt(string(code), 16, 16)
+				val, err := strconv.ParseUint(string(code), 16, 8)
 				if err != nil {
 					return nil, err
 				}

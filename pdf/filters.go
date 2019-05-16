@@ -108,7 +108,7 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 		}
 
 		// add decoded byte to decoded data
-		val, err := strconv.ParseInt(string([]byte{b1, b2}), 16, 16)
+		val, err := strconv.ParseUint(string([]byte{b1, b2}), 16, 8)
 		if err != nil {
 			return decoded_data, errors.New(fmt.Sprintf("Hex decode failed: %s", err))
 		}
