@@ -30,7 +30,7 @@ func main() {
 			}
 		} else {
 			// report objects with unsupported types
-			fmt.Fprintf(os.Stderr, "Unsupported object type for object #%d: %d", object, xref.Type)
+			fmt.Fprintf(os.Stderr, "Unsupported object type for object #%d: %d\n", object, xref.Type)
 		}
 	}
 }
