@@ -6,7 +6,7 @@ First, [Install Go](https://golang.org/doc/install#install)
 
 Then install PDF Parser by running the following command:
 ```bash
-go get github.com/KarmaPenny/pdf_parser
+go get github.com/KarmaPenny/pdfparser
 ```
 
 ## Command Line Usage
