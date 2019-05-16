@@ -23,15 +23,13 @@ func main() {
 		}
 
 		// print objects that are in use
-		else if xref.Type == 1 {
+		if xref.Type == 1 {
 			err = reader.PrintObject(object)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to print object %d: %s\n", object, err)
 			}
-		}
-
-		// report objects that are not supported
-		else {
+		} else {
+			// report objects with unsupported types
 			fmt.Fprintf(os.Stderr, "Unsupported object type for object #%d: %d", object, xref.Type)
 		}
 	}
