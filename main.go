@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/KarmaPenny/pdf"
+	"github.com/KarmaPenny/pdfparser/pdf"
 	"os"
 )
 
@@ -17,12 +17,22 @@ func main() {
 
 	// print all objects in xref
 	for object, xref := range reader.Xref {
-		// only print objects that are in use
-		if xref.Type == 1 {
+		// skip free objects
+		if xref.Type == 0 {
+			continue
+		}
+
+		// print objects that are in use
+		else if xref.Type == 1 {
 			err = reader.PrintObject(object)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to print object %d: %s\n", object, err)
 			}
+		}
+
+		// report objects that are not supported
+		else {
+			fmt.Fprintf(os.Stderr, "Unsupported object type for object #%d: %d", object, xref.Type)
 		}
 	}
 }

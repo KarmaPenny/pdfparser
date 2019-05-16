@@ -1,3 +1,3 @@
 *.swp
-pdf_parser
-pdfs
+pdfparser
+test/
