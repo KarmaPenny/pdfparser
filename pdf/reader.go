@@ -210,6 +210,11 @@ func (pdf *Reader) readXrefTable() error {
 		return errors.New(fmt.Sprintf("Trailer dictionary not found: %s", err))
 	}
 
+	// check if pdf is encrypted
+	if _, err := trailer.GetObject("/Encrypt"); err == nil {
+		return errors.New("PDF is encrypted")
+	}
+
 	// load previous xref section if it exists
 	if prev_xref_offset, err := trailer.GetInt64("/Prev"); err == nil {
 		return pdf.loadXref(prev_xref_offset)
@@ -234,6 +239,11 @@ func (pdf *Reader) readXrefStream() error {
 	trailer, err := pdf.NextDictionary()
 	if err != nil {
 		return errors.New(fmt.Sprintf("Trailer dictionary not found: %s", err))
+	}
+
+	// check if pdf is encrypted
+	if _, err := trailer.GetObject("/Encrypt"); err == nil {
+		return errors.New("PDF is encrypted")
 	}
 
 	// get the index and width arrays
