@@ -21,14 +21,33 @@ func TestStrings(test *testing.T) {
 	}
 	defer reader.Close()
 
-	// read the third object
+	// read the object 2
 	object, err := reader.ReadObject(2)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
 
-	// assert object 3 value is "(Hello)"
+	// assert object 2 value is correct
 	if object.Value.String() != "(newline\nnewline char\nno newline(balance parens allowed) escaped paren ) \\n Hello?)" {
+		test.Fatalf("Incorrect string value: %s", object.Value.String())
+	}
+}
+
+func TestHexStrings(test *testing.T) {
+	reader, err := pdf.Open(GetPath("hex_strings_test.pdf"))
+	if err != nil {
+		test.Fatalf("Failed to open pdf: %s", err)
+	}
+	defer reader.Close()
+
+	// read object 2
+	object, err := reader.ReadObject(2)
+	if err != nil {
+		test.Fatalf("Failed to read object: %s", err)
+	}
+
+	// assert object 2 is "<Hellop>"
+	if object.Value.String() != "<Hellop>" {
 		test.Fatalf("Incorrect string value: %s", object.Value.String())
 	}
 }
