@@ -249,7 +249,12 @@ func (pdf *Reader) readXrefStream() error {
 	// get the index and width arrays
 	index, err := trailer.GetArray("/Index")
 	if err != nil {
-		return err
+		// if there is no Index field then use default of [0 Size]
+		size, err := trailer.GetObject("/Size")
+		if err != nil {
+			return err
+		}
+		index = Array{NewTokenString("0"), size}
 	}
 	width, err := trailer.GetArray("/W")
 	if err != nil {

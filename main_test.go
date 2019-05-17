@@ -14,6 +14,25 @@ func GetPath(pdf_name string) string {
 	return filepath.Join(test_dir, "test", pdf_name)
 }
 
+func TestXrefStreamMissingIndex(test *testing.T) {
+	reader, err := pdf.Open(GetPath("xref_stream_missing_index_test.pdf"))
+	if err != nil {
+		test.Fatalf("Failed to open pdf: %s", err)
+	}
+	defer reader.Close()
+
+	// read the object 2
+	object, err := reader.ReadObject(2)
+	if err != nil {
+		test.Fatalf("Failed to read object: %s", err)
+	}
+
+	// assert object 2 value is correct
+	if object.Value.String() != "(Hello)" {
+		test.Fatalf("Incorrect string value: %s", object.Value.String())
+	}
+}
+
 func TestStrings(test *testing.T) {
 	reader, err := pdf.Open(GetPath("strings_test.pdf"))
 	if err != nil {
