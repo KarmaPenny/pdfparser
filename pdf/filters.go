@@ -281,24 +281,21 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 		// allocate buffer for decoded data
 		decoded_data := make([]byte, 0, len(data))
 
-		// png row includes a algorithm tag as first byte of each row
-		png_row_width := row_width + 1
+		// png row includes an algorithm tag as first byte of each row
+		row_width++
 
 		// determine the method
 		method := predictor - 10
 
 		// for each row
-		for row := 0; row * png_row_width < len(data); row++ {
-			// row start
-			r := row * png_row_width
-
+		for r := 0; r < len(data); r += row_width {
 			// optimum predictor allows the method to change each row based on algorithm tag
 			if predictor == 15 {
 				method = int(data[r])
 			}
 
 			// apply predictors based on method
-			for c := 1; c < png_row_width && r + c < len(data); c++ {
+			for c := 1; c < row_width && r + c < len(data); c++ {
 				if method == 0 {
 					// no predictor
 					decoded_data = append(decoded_data, data[r + c])
@@ -306,25 +303,25 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 					// sub predictor
 					left := 0
 					if c > 1 {
-						left = int(decoded_data[(row * row_width) + c - 2])
+						left = int(decoded_data[r + c - 1])
 					}
 					decoded_data = append(decoded_data, byte((int(data[r + c]) + left) % 256))
 				} else if method == 2 {
 					// up predictor
 					up := 0
-					if row > 0 {
-						up = int(decoded_data[((row - 1) * row_width) + c - 1])
+					if r + c - row_width > 0 {
+						up = int(decoded_data[r + c - row_width])
 					}
 					decoded_data = append(decoded_data, byte((int(data[r + c]) + up) % 256))
 				} else if method == 3 {
 					// avg predictor
 					left := 0
 					if c > 1 {
-						left = int(decoded_data[(row * row_width) + c - 2])
+						left = int(decoded_data[r + c - 1])
 					}
 					up := 0
-					if row > 0 {
-						up = int(decoded_data[((row - 1) * row_width) + c - 1])
+					if r + c - row_width > 0 {
+						up = int(decoded_data[r + c - row_width])
 					}
 					avg := (left + up) / 2
 					decoded_data = append(decoded_data, byte((int(data[r + c]) + avg) % 256))
@@ -332,15 +329,15 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 					//paeth predictor
 					left := 0
 					if c > 1 {
-						left = int(decoded_data[(row * row_width) + c - 2])
+						left = int(decoded_data[r + c - 1])
 					}
 					up := 0
-					if row > 0 {
-						up = int(decoded_data[((row - 1) * row_width) + c - 1])
+					if r + c - row_width > 0 {
+						up = int(decoded_data[r + c - row_width])
 					}
 					up_left := 0
-					if row > 0 && c > 1 {
-						up_left = int(decoded_data[((row -1) * row_width) + c - 2])
+					if r + c - row_width - 1 > 0 {
+						up_left = int(decoded_data[r + c - row_width - 1])
 					}
 					p := left + up - up_left
 					p_left := int(math.Abs(float64(p - left)))
