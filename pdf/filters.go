@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"strconv"
 	tiff_lzw "golang.org/x/image/tiff/lzw"
 )
@@ -294,12 +293,6 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 			// optimum predictor allows the method to change each row based on algorithm tag
 			if predictor == 15 {
 				method = int(data[r])
-			}
-
-			if r + row_width <= len(data) {
-				fmt.Fprintf(os.Stderr, "%x\n", data[r:r+row_width])
-			} else {
-				fmt.Fprintf(os.Stderr, "%x\n", data[r:])
 			}
 
 			// calculate start of row in decoded buffer
