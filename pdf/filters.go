@@ -69,40 +69,35 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 		}
 
 		// EOD marker
-		if b1 == '>' {
+		if b1 == byte('>') {
 			break
 		}
 
 		// make sure it is valid character
-		isNumber := b1 >= '0' && b1 <= '9'
-		isLower := b1 >= 'a' && b1 <= 'f'
-		isUpper := b1 >= 'A' && b1 <= 'F'
-		if !isNumber && !isLower && !isUpper {
+		if !IsHex(b1) {
 			return decoded_data, errors.New("illegal character in ASCIIHexDecode stream")
 		}
 
 		// get the second byte defaulting to zero
 		b2 := byte('0')
-		for i++; i < len(data); i++ {
+		for ; i < len(data); i++ {
 			// skip whitespace
-			if bytes.IndexByte(whitespace, data[i]) >= 0 {
+			if bytes.IndexByte(whitespace, data[i+1]) >= 0 {
 				continue
 			}
 
 			// EOD marker
-			if data[i] == '>' {
+			if data[i+1] == byte('>') {
 				break
 			}
 
 			// make sure it is valid character
-			isNumber := b1 >= '0' && b1 <= '9'
-			isLower := b1 >= 'a' && b1 <= 'f'
-			isUpper := b1 >= 'A' && b1 <= 'F'
-			if !isNumber && !isLower && !isUpper {
+			if !IsHex(data[i+1]) {
 				return decoded_data, errors.New("illegal character in ASCIIHexDecode stream")
 			}
 
 			// set second byte
+			i++
 			b2 = data[i]
 			break
 		}
@@ -119,6 +114,10 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 	return decoded_data, nil
 }
 
+func IsHex(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+}
+
 func ASCII85Decode(data []byte) ([]byte, error) {
 	decoder := ascii85.NewDecoder(bytes.NewReader(data))
 	var decoded_data bytes.Buffer
@@ -131,24 +130,30 @@ func ASCII85Decode(data []byte) ([]byte, error) {
 
 func RunLengthDecode(data []byte) ([]byte, error) {
 	var decoded_data bytes.Buffer
-	for i := 0; i < len(data); i++ {
+	for i := 0; i < len(data); {
+		// get length byte
+		length := int(data[i])
+
 		// EOD
-		if data[i] == 128 {
+		if length == 128 {
 			break
 		}
 
 		// literal copy
-		if data[i] < 128 {
+		if length < 128 {
 			// length is value of byte plus one
-			length := int(data[i]) + 1
+			length++
+
+			// increment index
+			i++
 
 			// make sure slice is within data bounds
-			if i + 1 + length >= len(data) {
-				return decoded_data.Bytes(), errors.New("Run Length error: Not enough data to copy")
+			if i + length > len(data) {
+				return decoded_data.Bytes(), fmt.Errorf("Run Length error: Not enough data to copy")
 			}
 
 			// copy the next length bytes to decoded_data
-			decoded_data.Write(data[i + 1:i + 1 + length])
+			decoded_data.Write(data[i:i + length])
 
 			// increment index by length and continue
 			i += length
@@ -156,17 +161,20 @@ func RunLengthDecode(data []byte) ([]byte, error) {
 		}
 
 		// duplicate next byte
-		if data[i] > 128 {
+		if length > 128 {
+			// increment index
+			i++
+
 			// make sure byte is within data bounds
-			if i + 1 >= len(data) {
+			if i >= len(data) {
 				return decoded_data.Bytes(), errors.New("Run Length error: byte out of bounds")
 			}
-			times := 257 - int(data[i])
-			b := data[i + 1]
 
-			// copy b 
+			times := 257 - length
+
+			// copy times times
 			for n := 0; n < times; n++ {
-				decoded_data.WriteByte(b)
+				decoded_data.WriteByte(data[i])
 			}
 
 			// increment index

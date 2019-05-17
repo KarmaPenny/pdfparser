@@ -24,7 +24,7 @@ type Reader struct {
 func Open(path string) (*Reader, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Failed to open %s: %s", path, err))
+		return nil, err
 	}
 	pdf := &Reader{file, NewTokenizer(file), map[int64]*XrefEntry{}, map[int64]interface{}{}}
 
@@ -32,14 +32,14 @@ func Open(path string) (*Reader, error) {
 	start_xref_offset, err := pdf.getStartXrefOffset()
 	if err != nil {
 		pdf.Close()
-		return nil, errors.New(fmt.Sprintf("Xref not found: %s", err))
+		return nil, err
 	}
 
 	// load the cross reference table
 	err = pdf.loadXref(start_xref_offset)
 	if err != nil {
 		pdf.Close()
-		return nil, errors.New(fmt.Sprintf("Failed to load xref: %s", err))
+		return nil, err
 	}
 
 	return pdf, nil
@@ -65,7 +65,7 @@ func (pdf *Reader) getStartXrefOffset() (int64, error) {
 	// start reading from the end of the file
 	offset, err := pdf.Seek(0, io.SeekEnd)
 	if err != nil {
-		return 0, errors.New(fmt.Sprintf("Unable to get file_size: %s", err))
+		return 0, err
 	}
 
 	// read until we find startxref marker or we reach the start of the file
@@ -82,7 +82,7 @@ func (pdf *Reader) getStartXrefOffset() (int64, error) {
 		buffer := make([]byte, start_xref_scan_buffer_size)
 		_, err = pdf.ReadAt(buffer, offset)
 		if err != nil && err != io.EOF {
-			return 0, errors.New(fmt.Sprintf("Scan for startxref failed: %s", err))
+			return 0, err
 		}
 
 		// check for start xref
@@ -94,7 +94,7 @@ func (pdf *Reader) getStartXrefOffset() (int64, error) {
 	}
 
 	// start xref not found
-	return 0, errors.New("startxref marker not found.")
+	return 0, ErrStartXrefNotFound
 }
 
 // loadXref loads an xref section starting at offset into pdf.Xref
@@ -115,7 +115,7 @@ func (pdf *Reader) loadXref(offset int64) error {
 	// find xref start
 	s, err := pdf.NextString()
 	if err != nil {
-		return errors.New(fmt.Sprintf("Xref start not found: %s", err))
+		return err
 	}
 
 	// xref is a table
@@ -212,7 +212,7 @@ func (pdf *Reader) readXrefTable() error {
 
 	// check if pdf is encrypted
 	if _, err := trailer.GetObject("/Encrypt"); err == nil {
-		return errors.New("PDF is encrypted")
+		return ErrEncrypted
 	}
 
 	// load previous xref section if it exists
@@ -243,7 +243,7 @@ func (pdf *Reader) readXrefStream() error {
 
 	// check if pdf is encrypted
 	if _, err := trailer.GetObject("/Encrypt"); err == nil {
-		return errors.New("PDF is encrypted")
+		return ErrEncrypted
 	}
 
 	// get the index and width arrays
@@ -328,70 +328,62 @@ func (pdf *Reader) readXrefStream() error {
 	return nil
 }
 
-// PrintObject prints an object
-func (pdf *Reader) PrintObject(number int64) error {
-	// read the object
-	object_number, generation, object, err := pdf.ReadObject(number)
-	if err != nil {
-		return err
-	}
-
-	// get next string
-	s, err := pdf.NextString()
-	if err != nil {
-		return err
-	}
-
-	// if this is a stream object
-	if s == "stream" {
-		if d, ok := object.(Dictionary); ok {
-			data, err := pdf.ReadStream(d)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to read stream %d: %s\n", object_number, err)
-			}
-			fmt.Printf("%d %d obj\n%s\nstream\n%s\nendstream\nendobj\n", object_number, generation, object, string(data))
-			return nil
-		}
-		return errors.New("Stream is missing dictionary")
-	}
-
-	fmt.Printf("%d %d obj\n%s\nendobj\n", object_number, generation, object)
-	return nil
-}
-
 // ReadObject reads an object by looking up the number in the xref table
-func (pdf *Reader) ReadObject(number int64) (object_number int64, generation_number int64, object Object, err error) {
+func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
+	// create a new indirect object
+	object := NewIndirectObject(number)
+
 	if xref_entry, ok := pdf.Xref[number]; ok && xref_entry.Type == 1 {
 		// seek to start of object
-		_, err = pdf.Seek(xref_entry.Offset, io.SeekStart)
+		_, err := pdf.Seek(xref_entry.Offset, io.SeekStart)
 		if err != nil {
-			return
+			return object, err
 		}
 
 		// get object number
 		_, err = pdf.NextInt64()
 		if err != nil {
-			return
+			return object, fmt.Errorf("Failed to read object number: %s", err)
 		}
-		object_number = number
 
 		// get generation number
-		generation_number, err = pdf.NextInt64()
+		object.Generation, err = pdf.NextInt64()
 		if err != nil {
-			return
+			return object, fmt.Errorf("Failed to read generation number: %s", err)
 		}
 
 		// skip obj start marker
 		_, err = pdf.NextString()
 		if err != nil {
-			return
+			return object, fmt.Errorf("Failed to skip object start marker: %s", err)
 		}
 
 		// get the value of the reference
-		object, err = pdf.NextObject()
-		return
+		object.Value, err = pdf.NextObject()
+		if err != nil {
+			return object, fmt.Errorf("Failed to read object value: %s", err)
+		}
+
+		// get next string
+		var s string
+		s, err = pdf.NextString()
+		if err != nil {
+			return object, fmt.Errorf("Failed to read object end marker: %s", err)
+		}
+
+		// if this is a stream object
+		if s == "stream" {
+			if d, ok := object.Value.(Dictionary); ok {
+				object.Stream, err = pdf.ReadStream(d)
+				if err != nil {
+					return object, fmt.Errorf("Failed to read stream: %s", err)
+				}
+				return object, nil
+			}
+			return object, ErrStreamDictionaryMissing
+		}
 	}
-	return number, 0, NewTokenString("null"), nil
+	return object, nil
 }
 
 func (pdf *Reader) ReadStream(d Dictionary) ([]byte, error) {

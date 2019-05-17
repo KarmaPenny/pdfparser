@@ -16,21 +16,24 @@ func main() {
 	defer reader.Close()
 
 	// print all objects in xref
-	for object, xref := range reader.Xref {
+	for number, xref := range reader.Xref {
 		// skip free objects
 		if xref.Type == 0 {
 			continue
 		}
 
-		// print objects that are in use
-		if xref.Type == 1 {
-			err = reader.PrintObject(object)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to print object %d: %s\n", object, err)
-			}
-		} else {
-			// report objects with unsupported types
-			fmt.Fprintf(os.Stderr, "Unsupported object type for object #%d: %d\n", object, xref.Type)
+		// report unsupported object types
+		if xref.Type != 1 {
+			fmt.Fprintf(os.Stderr, "Unsupported object type for object %d: %d\n", number, xref.Type)
 		}
+
+		// read object
+		object, err := reader.ReadObject(number)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to read object %d: %s\n", number, err)
+		}
+
+		// print object
+		object.Print()
 	}
 }

@@ -11,8 +11,7 @@ go get github.com/KarmaPenny/pdfparser
 
 ## Command Line Usage
 ```bash
-cd $(go env GOPATH)/bin
-./pdf_parser test.pdf > output.pdf
+$(go env GOPATH)/bin/pdf_parser test.pdf > output.pdf
 ```
 
 ## Library Usage
@@ -42,4 +41,10 @@ func main() {
     }
   }
 }
+```
+
+## Unit Testing
+```bash
+cd $(go env GOPATH)/src/github.com/KarmaPenny/pdfparser
+go test
 ```
