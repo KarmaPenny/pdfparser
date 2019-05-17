@@ -333,7 +333,8 @@ func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
 	// create a new indirect object
 	object := NewIndirectObject(number)
 
-	if xref_entry, ok := pdf.Xref[number]; ok && xref_entry.Type == 1 {
+	// TODO: add support for compressed object type
+	if xref_entry, ok := pdf.Xref[number]; ok && xref_entry.Type == XrefTypeIndirectObject {
 		// seek to start of object
 		_, err := pdf.Seek(xref_entry.Offset, io.SeekStart)
 		if err != nil {

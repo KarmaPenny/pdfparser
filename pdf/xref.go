@@ -4,6 +4,10 @@ import (
 	"fmt"
 )
 
+const XrefTypeFreeObject int64 = 0
+const XrefTypeIndirectObject int64 = 1
+const XrefTypeCompressedObject int64 = 2
+
 type XrefEntry struct {
 	Offset int64
 	Generation int64
