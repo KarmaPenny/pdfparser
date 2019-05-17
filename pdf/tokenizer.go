@@ -301,7 +301,7 @@ func (tokenizer *Tokenizer) SkipWhitespace() (byte, error) {
 
 		// if next byte is start of a comment then advance until next line
 		if b == '%' {
-			_, err = tokenizer.ReadBytes('%')
+			_, err = tokenizer.ReadBytes('\n')
 			if err != nil {
 				return 0, err
 			}

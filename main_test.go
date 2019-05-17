@@ -52,6 +52,63 @@ func TestHexStrings(test *testing.T) {
 	}
 }
 
+func TestComments(test *testing.T) {
+	reader, err := pdf.Open(GetPath("comments_test.pdf"))
+	if err != nil {
+		test.Fatalf("Failed to open pdf: %s", err)
+	}
+	defer reader.Close()
+
+	// read object 2
+	object, err := reader.ReadObject(2)
+	if err != nil {
+		test.Fatalf("Failed to read object: %s", err)
+	}
+
+	// assert object 2 is "(%this is not a comment)"
+	if object.Value.String() != "(%this is not a comment)" {
+		test.Fatalf("Incorrect string value: %s", object.Value.String())
+	}
+}
+
+func TestReferences(test *testing.T) {
+	reader, err := pdf.Open(GetPath("references_test.pdf"))
+	if err != nil {
+		test.Fatalf("Failed to open pdf: %s", err)
+	}
+	defer reader.Close()
+
+	// read object 2
+	object, err := reader.ReadObject(2)
+	if err != nil {
+		test.Fatalf("Failed to read object: %s", err)
+	}
+
+	// assert object 2 stream is "Hello World"
+	if string(object.Stream) != "Hello World" {
+		test.Fatalf("Incorrect stream value: %s", string(object.Stream))
+	}
+}
+
+func TestMultipleFilters(test *testing.T) {
+	reader, err := pdf.Open(GetPath("multiple_filters_test.pdf"))
+	if err != nil {
+		test.Fatalf("Failed to open pdf: %s", err)
+	}
+	defer reader.Close()
+
+	// read object 2
+	object, err := reader.ReadObject(2)
+	if err != nil {
+		test.Fatalf("Failed to read object: %s", err)
+	}
+
+	// assert object 2 stream is "Hello"
+	if string(object.Stream) != "Hello" {
+		test.Fatalf("Incorrect stream value: %s", string(object.Stream))
+	}
+}
+
 func TestMultipleXrefTable(test *testing.T) {
 	reader, err := pdf.Open(GetPath("multiple_xref_table_test.pdf"))
 	if err != nil {
