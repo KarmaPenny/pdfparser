@@ -14,7 +14,7 @@ go get github.com/KarmaPenny/pdfparser
 go get -u github.com/KarmaPenny/pdfparser
 ```
 
-### To uninstall the PDF parser run:
+#### To uninstall the PDF parser run:
 ```bash
 go clean -i github.com/KarmaPenny/pdfparser && rm -rf $(go env GOPATH)/src/github.com/KarmaPenny/pdfparser
 ```
