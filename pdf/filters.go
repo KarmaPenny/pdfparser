@@ -294,7 +294,7 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 
 			// optimum predictor allows the method to change each row based on algorithm tag
 			if predictor == 15 {
-				method = int(data[r * png_row_width])
+				method = int(data[r])
 			}
 
 			// apply predictors based on method
