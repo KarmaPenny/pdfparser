@@ -51,7 +51,7 @@ func DecodeStream(filter string, data []byte, decode_parms_object Object) ([]byt
 	}
 
 	// return error if filter is not supported
-	return data, errors.New(fmt.Sprintf("Unsupported filter: %s", filter))
+	return data, NewErrUnsupportedFilter(filter)
 }
 
 func ASCIIHexDecode(data []byte) ([]byte, error) {
@@ -358,7 +358,8 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 						decoded_data = append(decoded_data, byte((int(data[r + c]) + up_left) % 256))
 					}
 				} else {
-					return decoded_data, fmt.Errorf("unsupported PNG predictor method: %d", method)
+					// unknown predictor, do nothing
+					decoded_data = append(decoded_data, data[r + c])
 				}
 			}
 		}

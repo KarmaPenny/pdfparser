@@ -439,7 +439,10 @@ func (pdf *Reader) ReadStream(d Dictionary) ([]byte, error) {
 			}
 			stream_data, err = DecodeStream(f.String(), stream_data, decode_parms_list_object)
 			if err != nil {
-				return stream_data, errors.New(fmt.Sprintf("failed to decode stream: %s", err))
+				if _, ok := err.(*ErrUnsupportedFilter); ok {
+					break
+				}
+				return stream_data, fmt.Errorf("failed to decode stream: %s", err)
 			}
 		}
 		return stream_data, nil
@@ -448,7 +451,9 @@ func (pdf *Reader) ReadStream(d Dictionary) ([]byte, error) {
 	// if filter is a single filter then apply it
 	stream_data, err = DecodeStream(filter.String(), stream_data, decode_parms_object)
 	if err != nil {
-		return stream_data, errors.New(fmt.Sprintf("failed to decode stream: %s", err))
+		if _, ok := err.(*ErrUnsupportedFilter); !ok {
+			return stream_data, fmt.Errorf("failed to decode stream: %s", err)
+		}
 	}
 	return stream_data, nil
 }
