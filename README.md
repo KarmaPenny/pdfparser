@@ -2,14 +2,9 @@
 PDF Parser is a command line tool and go library for decoding PDFs
 
 ## Installation
-[Install Go](https://golang.org/doc/install#install)
+First, [Install Go](https://golang.org/doc/install#install)
 
-Then install the PDF Parser with the following command:
-```bash
-go get github.com/KarmaPenny/pdfparser
-```
-
-#### To update an existing PDF parser installation run:
+Then install/update the PDF Parser with the following command:
 ```bash
 go get -u github.com/KarmaPenny/pdfparser
 ```
