@@ -53,7 +53,7 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 					return nil, err
 				}
 
-				// ignore line breaks \n or \r or \r\n
+				// ignore escaped line breaks \n or \r or \r\n
 				if b == '\n' {
 					continue
 				}
@@ -71,6 +71,19 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 						}
 					}
 					continue
+				}
+
+				// special escape values
+				if b == 'n' {
+					b = '\n'
+				} else if b == 'r' {
+					b = '\r'
+				} else if b == 't' {
+					b = '\t'
+				} else if b == 'b' {
+					b = '\b'
+				} else if b == 'f' {
+					b = '\f'
 				}
 
 				// if this is the start of an octal character code

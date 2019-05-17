@@ -28,7 +28,7 @@ func TestStrings(test *testing.T) {
 	}
 
 	// assert object 3 value is "(Hello)"
-	if object.Value.String() != "(newline\nnewline char\nno newline(balanced parens allowed) escaped paren ) \\n Hello?)" {
+	if object.Value.String() != "(newline\nnewline char\nno newline(balance parens allowed) escaped paren ) \\n Hello?)" {
 		test.Fatalf("Incorrect string value: %s", object.Value.String())
 	}
 }
