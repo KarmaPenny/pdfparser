@@ -4,7 +4,7 @@ PDF Parser is a command line tool and go library for decoding PDFs
 ## Installation
 First, [Install Go](https://golang.org/doc/install#install)
 
-Then install/update the PDF Parser with the following command:
+Then install/update the PDF Parser
 ```bash
 go get -u github.com/KarmaPenny/pdfparser
 ```
@@ -14,12 +14,13 @@ go get -u github.com/KarmaPenny/pdfparser
 go clean -i github.com/KarmaPenny/pdfparser && rm -rf $(go env GOPATH)/src/github.com/KarmaPenny/pdfparser
 ```
 
-## Command Line Usage
+## Usage
+#### Command Line
 ```bash
-$(go env GOPATH)/bin/pdf_parser test.pdf > output.pdf
+$(go env GOPATH)/bin/pdfparser input.pdf > output.pdf
 ```
 
-## Library Usage
+#### Library
 ```go
 package main
 
@@ -54,6 +55,5 @@ func main() {
 
 ## Unit Testing
 ```bash
-cd $(go env GOPATH)/src/github.com/KarmaPenny/pdfparser
-go test
+go test github.com/KarmaPenny/pdfparser
 ```
