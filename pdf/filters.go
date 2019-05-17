@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"strconv"
 	tiff_lzw "golang.org/x/image/tiff/lzw"
 )
@@ -282,6 +283,7 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 		decoded_data := make([]byte, 0, len(data))
 
 		// png row includes an algorithm tag as first byte of each row
+		d_row_width := row_width
 		row_width++
 
 		// determine the method
@@ -294,64 +296,76 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 				method = int(data[r])
 			}
 
+			if r + row_width <= len(data) {
+				fmt.Fprintf(os.Stderr, "%x\n", data[r:r+row_width])
+			} else {
+				fmt.Fprintf(os.Stderr, "%x\n", data[r:])
+			}
+
+			// calculate start of row in decoded buffer
+			dr := (r / row_width) * (row_width - 1)
+
 			// apply predictors based on method
 			for c := 1; c < row_width && r + c < len(data); c++ {
+				// calculate column in decoded buffer
+				dc := c - 1
+
 				if method == 0 {
 					// no predictor
 					decoded_data = append(decoded_data, data[r + c])
 				} else if method == 1 {
 					// sub predictor
 					left := 0
-					if c > 1 {
-						left = int(decoded_data[r + c - 1])
+					if dc > 0 {
+						left = int(decoded_data[dr + dc - 1])
 					}
 					decoded_data = append(decoded_data, byte((int(data[r + c]) + left) % 256))
 				} else if method == 2 {
 					// up predictor
 					up := 0
-					if r + c - row_width > 0 {
-						up = int(decoded_data[r + c - row_width])
+					if dr + dc - d_row_width >= 0 {
+						up = int(decoded_data[dr + dc - d_row_width])
 					}
 					decoded_data = append(decoded_data, byte((int(data[r + c]) + up) % 256))
 				} else if method == 3 {
 					// avg predictor
 					left := 0
-					if c > 1 {
-						left = int(decoded_data[r + c - 1])
+					if dc > 0 {
+						left = int(decoded_data[dr + dc - 1])
 					}
 					up := 0
-					if r + c - row_width > 0 {
-						up = int(decoded_data[r + c - row_width])
+					if dr + dc - d_row_width >= 0 {
+						up = int(decoded_data[dr + dc - d_row_width])
 					}
 					avg := (left + up) / 2
 					decoded_data = append(decoded_data, byte((int(data[r + c]) + avg) % 256))
 				} else if method == 4 {
 					//paeth predictor
 					left := 0
-					if c > 1 {
-						left = int(decoded_data[r + c - 1])
+					if dc > 0 {
+						left = int(decoded_data[dr + dc - 1])
 					}
 					up := 0
-					if r + c - row_width > 0 {
-						up = int(decoded_data[r + c - row_width])
+					if dr + dc - d_row_width >= 0 {
+						up = int(decoded_data[dr + dc - d_row_width])
 					}
 					up_left := 0
-					if r + c - row_width - 1 > 0 {
-						up_left = int(decoded_data[r + c - row_width - 1])
+					if dr + dc - d_row_width - 1 >= 0 && dc > 0 {
+						up_left = int(decoded_data[dr + dc - d_row_width - 1])
 					}
 					p := left + up - up_left
 					p_left := int(math.Abs(float64(p - left)))
 					p_up := int(math.Abs(float64(p - up)))
 					p_up_left := int(math.Abs(float64(p - up_left)))
 					if p_left <= p_up && p_left <= p_up_left {
-						data[r + c] = byte((int(data[r + c]) + left) % 256)
+						decoded_data = append(decoded_data, byte((int(data[r + c]) + left) % 256))
 					} else if p_up <= p_up_left {
-						data[r + c] = byte((int(data[r + c]) + up) % 256)
+						decoded_data = append(decoded_data, byte((int(data[r + c]) + up) % 256))
 					} else {
-						data[r + c] = byte((int(data[r + c]) + up_left) % 256)
+						decoded_data = append(decoded_data, byte((int(data[r + c]) + up_left) % 256))
 					}
 				} else {
-					return data, errors.New("unsupported PNG predictor method")
+					return decoded_data, fmt.Errorf("unsupported PNG predictor method: %d", method)
 				}
 			}
 		}
