@@ -80,7 +80,7 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 
 		// get the second byte defaulting to zero
 		b2 := byte('0')
-		for ; i < len(data); i++ {
+		for ; i + 1 < len(data); i++ {
 			// skip whitespace
 			if bytes.IndexByte(whitespace, data[i+1]) >= 0 {
 				continue
