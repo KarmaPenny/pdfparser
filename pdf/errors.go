@@ -41,14 +41,22 @@ func (err *ErrUnsupported) Error() string {
 	return err.message
 }
 
-type ErrEncrypted struct {
-	message string
-}
+type ErrEncrypted struct {}
 
 func NewErrEncrypted() *ErrEncrypted {
-	return &ErrEncrypted{"Pdf encryption not supported"}
+	return &ErrEncrypted{}
 }
 
 func (err *ErrEncrypted) Error() string {
-	return err.message
+	return "Pdf encryption not supported"
+}
+
+type ErrXref struct {}
+
+func NewErrXref() *ErrXref {
+	return &ErrXref{}
+}
+
+func (err *ErrXref) Error() string {
+	return "Failed to load xref"
 }

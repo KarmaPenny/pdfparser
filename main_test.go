@@ -172,9 +172,6 @@ func TestEncryptedPdf(test *testing.T) {
 		reader.Close()
 		test.Fatal("Failed to detect encryption")
 	}
-	if _, ok := err.(*pdf.ErrEncrypted); ! ok {
-		test.Fatalf("Failed to detect encryption")
-	}
 }
 
 func TestASCIIHexDecodeFilter(test *testing.T) {

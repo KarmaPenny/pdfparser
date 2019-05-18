@@ -31,14 +31,14 @@ func Open(path string) (*Reader, error) {
 	start_xref_offset, err := pdf.getStartXrefOffset()
 	if err != nil {
 		pdf.Close()
-		return nil, err
+		return nil, NewErrXref()
 	}
 
 	// load the cross reference table
 	err = pdf.loadXref(start_xref_offset)
 	if err != nil {
 		pdf.Close()
-		return nil, err
+		return nil, NewErrXref()
 	}
 
 	return pdf, nil
