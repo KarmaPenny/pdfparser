@@ -213,7 +213,7 @@ func (pdf *Reader) readXrefTable() error {
 
 	// check if pdf is encrypted
 	if _, err := trailer.GetObject("/Encrypt"); err == nil {
-		return NewErrEncrypted("Pdf encryption not supported")
+		return NewErrEncrypted()
 	}
 
 	// load previous xref section if it exists
@@ -244,7 +244,7 @@ func (pdf *Reader) readXrefStream() error {
 
 	// check if pdf is encrypted
 	if _, err := trailer.GetObject("/Encrypt"); err == nil {
-		return NewErrEncrypted("Pdf encryption not supported")
+		return NewErrEncrypted()
 	}
 
 	// get the index and width arrays

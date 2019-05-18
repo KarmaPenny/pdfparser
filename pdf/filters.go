@@ -231,7 +231,7 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 
 	// this is really hard with non byte length components so we don't support them
 	if bits_per_component != 8 {
-		return data, NewErrUnsupported("BitsPerComponent: %d", bits_per_component)
+		return data, NewErrUnsupported("BitsPerComponent not supported: %d", bits_per_component)
 	}
 
 	// determine sample and row widths
@@ -349,5 +349,5 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 	}
 
 	// unknown predictor
-	return data, NewErrUnsupported("Predictor: %d", predictor)
+	return data, NewErrUnsupported("Predictor not supported: %d", predictor)
 }

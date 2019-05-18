@@ -15,6 +15,9 @@ func NewError(err error) *ErrTrace {
 }
 
 func NewErrorf(format string, a ...interface{}) *ErrTrace {
+	if len(a) == 0 {
+		return &ErrTrace{format, debug.Stack()}
+	}
 	return &ErrTrace{fmt.Sprintf(format, a), debug.Stack()}
 }
 
@@ -42,8 +45,8 @@ type ErrEncrypted struct {
 	message string
 }
 
-func NewErrEncrypted(message string, a ...interface{}) *ErrEncrypted {
-	return &ErrEncrypted{fmt.Sprintf(message, a)}
+func NewErrEncrypted() *ErrEncrypted {
+	return &ErrEncrypted{"Pdf encryption not supported"}
 }
 
 func (err *ErrEncrypted) Error() string {
