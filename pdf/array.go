@@ -1,7 +1,6 @@
 package pdf
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 )
@@ -28,7 +27,7 @@ func (a Array) GetInt(index int) (int, error) {
 	}
 	i, err := strconv.ParseInt(object.String(), 10, 32)
 	if err != nil {
-		return 0, err
+		return 0, NewError(err)
 	}
 	return int(i), nil
 }
@@ -38,7 +37,11 @@ func (a Array) GetInt64(index int) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return strconv.ParseInt(object.String(), 10, 64)
+	i, err := strconv.ParseInt(object.String(), 10, 64)
+	if err != nil {
+		return 0, NewError(err)
+	}
+	return i, nil
 }
 
 // GetObject gets an object from an array, resolving references if needed
@@ -50,5 +53,5 @@ func (a Array) GetObject(index int) (Object, error) {
 		}
 		return object, nil
 	}
-	return nil, errors.New("index out of bounds")
+	return nil, NewErrorf("Index out of bounds")
 }

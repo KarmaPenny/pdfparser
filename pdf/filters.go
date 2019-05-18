@@ -5,8 +5,6 @@ import (
 	"compress/lzw"
 	"compress/zlib"
 	"encoding/ascii85"
-	"errors"
-	"fmt"
 	"io"
 	"math"
 	"strconv"
@@ -45,13 +43,8 @@ func DecodeStream(filter string, data []byte, decode_parms_object Object) ([]byt
 		return LZWDecode(data, decode_parms)
 	}
 
-	// don't bother decoding jpegs into images just dump them as is
-	if filter == "/DCTDecode" {
-		return data, nil
-	}
-
 	// return error if filter is not supported
-	return data, NewErrUnsupportedFilter(filter)
+	return data, NewErrUnsupported("Filter not supported: %s", filter)
 }
 
 func ASCIIHexDecode(data []byte) ([]byte, error) {
@@ -75,7 +68,7 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 
 		// make sure it is valid character
 		if !IsHex(b1) {
-			return decoded_data, errors.New("illegal character in ASCIIHexDecode stream")
+			return decoded_data, NewErrorf("Illegal character: %x", b1)
 		}
 
 		// get the second byte defaulting to zero
@@ -93,7 +86,7 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 
 			// make sure it is valid character
 			if !IsHex(data[i+1]) {
-				return decoded_data, errors.New("illegal character in ASCIIHexDecode stream")
+				return decoded_data, NewErrorf("Illegal character: %x", data[i+1])
 			}
 
 			// set second byte
@@ -105,7 +98,7 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 		// add decoded byte to decoded data
 		val, err := strconv.ParseUint(string([]byte{b1, b2}), 16, 8)
 		if err != nil {
-			return decoded_data, errors.New(fmt.Sprintf("Hex decode failed: %s", err))
+			return decoded_data, NewError(err)
 		}
 		b := byte(val)
 		decoded_data = append(decoded_data, b)
@@ -123,7 +116,7 @@ func ASCII85Decode(data []byte) ([]byte, error) {
 	var decoded_data bytes.Buffer
 	bytes_read, err := decoded_data.ReadFrom(decoder)
 	if bytes_read == 0 && err != nil {
-		return data, errors.New(fmt.Sprintf("failed to ascii85 decode stream: %s", err))
+		return data, NewError(err)
 	}
 	return decoded_data.Bytes(), nil
 }
@@ -137,47 +130,36 @@ func RunLengthDecode(data []byte) ([]byte, error) {
 		// EOD
 		if length == 128 {
 			break
-		}
-
-		// literal copy
-		if length < 128 {
+		} else if length < 128 {
 			// length is value of byte plus one
 			length++
 
 			// increment index
 			i++
-
-			// make sure slice is within data bounds
-			if i + length > len(data) {
-				return decoded_data.Bytes(), fmt.Errorf("Run Length error: Not enough data to copy")
+			if i >= len(data) {
+				break
 			}
 
-			// copy the next length bytes to decoded_data
-			decoded_data.Write(data[i:i + length])
-
-			// increment index by length and continue
-			i += length
-			continue
-		}
-
-		// duplicate next byte
-		if length > 128 {
+			// copy as much data as we can up to length
+			if i + length > len(data) {
+				decoded_data.Write(data[i:])
+				break
+			} else {
+				decoded_data.Write(data[i:i + length])
+				i += length
+			}
+		} else if length > 128 {
 			// increment index
 			i++
-
-			// make sure byte is within data bounds
 			if i >= len(data) {
-				return decoded_data.Bytes(), errors.New("Run Length error: byte out of bounds")
+				break
 			}
 
+			// copy byte 257 - length times
 			times := 257 - length
-
-			// copy times times
 			for n := 0; n < times; n++ {
 				decoded_data.WriteByte(data[i])
 			}
-
-			// increment index
 			i++
 		}
 	}
@@ -188,7 +170,7 @@ func FlateDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
 	// create zlib reader from data
 	zlib_reader, err := zlib.NewReader(bytes.NewReader(data))
 	if err != nil {
-		return data, err
+		return data, NewError(err)
 	}
 	defer zlib_reader.Close()
 
@@ -196,7 +178,7 @@ func FlateDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
 	var decoded_data bytes.Buffer
 	bytes_read, err := decoded_data.ReadFrom(zlib_reader)
 	if bytes_read == 0 && err != nil {
-		return data, errors.New(fmt.Sprintf("failed to zlib decode stream: %s", err))
+		return data, NewError(err)
 	}
 
 	// reverse predictor
@@ -221,7 +203,7 @@ func LZWDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
 	var decoded_data bytes.Buffer
 	bytes_read, err := decoded_data.ReadFrom(lzw_reader)
 	if bytes_read == 0 && err != nil {
-		return data, errors.New(fmt.Sprintf("failed to lzw decode stream: %s", err))
+		return data, NewError(err)
 	}
 
 	// reverse predictor
@@ -249,7 +231,7 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 
 	// this is really hard with non byte length components so we don't support them
 	if bits_per_component != 8 {
-		return data, errors.New(fmt.Sprintf("unsupported BitsPerComponent: %d", bits_per_component))
+		return data, NewErrUnsupported("BitsPerComponent: %d", bits_per_component)
 	}
 
 	// determine sample and row widths
@@ -258,7 +240,7 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 
 	// throw error if row width is not positive
 	if row_width <= 0 {
-		return data, errors.New("invalid row width")
+		return data, NewErrorf("Invalid row width: %d", row_width)
 	}
 
 	// no predictor applied
@@ -366,5 +348,6 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 		return decoded_data, nil
 	}
 
-	return data, errors.New(fmt.Sprintf("unsupported predictor: %d", predictor))
+	// unknown predictor
+	return data, NewErrUnsupported("Predictor: %d", predictor)
 }

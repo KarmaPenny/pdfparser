@@ -1,8 +1,6 @@
 package pdf
 
 import (
-	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 )
@@ -28,7 +26,7 @@ func (d Dictionary) GetInt(key string) (int, error) {
 	}
 	i, err := strconv.ParseInt(object.String(), 10, 32)
 	if err != nil {
-		return 0, err
+		return 0, NewError(err)
 	}
 	return int(i), nil
 }
@@ -38,7 +36,11 @@ func (d Dictionary) GetInt64(key string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return strconv.ParseInt(object.String(), 10, 64)
+	i, err := strconv.ParseInt(object.String(), 10, 64)
+	if err != nil {
+		return 0, NewError(err)
+	}
+	return i, nil
 }
 
 func (d Dictionary) GetArray(key string) (Array, error) {
@@ -49,7 +51,7 @@ func (d Dictionary) GetArray(key string) (Array, error) {
 	if array, ok := object.(Array); ok {
 		return array, nil
 	}
-	return nil, errors.New("object is not array")
+	return nil, NewErrorf("Expected Array")
 }
 
 // GetObjectFromDictionary gets an object from a dictionary, resolving references if needed
@@ -60,5 +62,5 @@ func (d Dictionary) GetObject(key string) (Object, error) {
 		}
 		return object, nil
 	}
-	return nil, errors.New(fmt.Sprintf("dictionary missing key: %s", key))
+	return nil, NewErrorf("Missing key: %s", key)
 }

@@ -11,7 +11,9 @@ func main() {
 	reader, err := pdf.Open(os.Args[1])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		return
+		if stack, ok := err.(*pdf.ErrTrace); ok {
+			fmt.Fprintln(os.Stderr, stack.Trace())
+		}
 	}
 	defer reader.Close()
 
@@ -20,7 +22,11 @@ func main() {
 		// read object
 		object, err := reader.ReadObject(number)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to read object %d: %s\n", number, err)
+			if stack, ok := err.(*pdf.ErrTrace); ok {
+				fmt.Fprintln(os.Stderr, err)
+				fmt.Fprintln(os.Stderr, stack.Trace())
+				continue
+			}
 		}
 
 		// print object

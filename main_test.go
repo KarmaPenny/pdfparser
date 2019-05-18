@@ -168,11 +168,12 @@ func TestMultipleXrefStream(test *testing.T) {
 // TestEncryptedPdf asserts that encrypted pdfs return pdf.ErrEncrypted on opening
 func TestEncryptedPdf(test *testing.T) {
 	reader, err := pdf.Open(GetPath("encrypted_test.pdf"))
-	if err != pdf.ErrEncrypted {
-		if err == nil {
-			reader.Close()
-		}
-		test.Fatalf("Failed to detect encryption: %s", err)
+	if err == nil {
+		reader.Close()
+		test.Fatal("Failed to detect encryption")
+	}
+	if _, ok := err.(*pdf.ErrEncrypted); ! ok {
+		test.Fatalf("Failed to detect encryption")
 	}
 }
 
