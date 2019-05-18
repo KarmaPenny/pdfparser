@@ -14,6 +14,7 @@ func main() {
 		if stack, ok := err.(*pdf.ErrTrace); ok {
 			fmt.Fprintln(os.Stderr, stack.Trace())
 		}
+		return
 	}
 	defer reader.Close()
 
