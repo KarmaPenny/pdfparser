@@ -40,7 +40,7 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 			// read next byte
 			b, err = tokenizer.ReadByte()
 			if err != nil {
-				return nil, NewError(err)
+				return nil, WrapError(err, "Failed to tokenize string")
 			}
 
 			// if this is the start of an escape sequence
@@ -48,7 +48,7 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 				// read next byte
 				b, err = tokenizer.ReadByte()
 				if err != nil {
-					return nil, NewError(err)
+					return nil, WrapError(err, "Failed to tokenize string")
 				}
 
 				// ignore escaped line breaks \n or \r or \r\n
@@ -59,13 +59,13 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 					// read next byte
 					b, err = tokenizer.ReadByte()
 					if err != nil {
-						return nil, NewError(err)
+						return nil, WrapError(err, "Failed to tokenize string")
 					}
 					// if byte is not a new line then unread it
 					if b != '\n' {
 						err = tokenizer.UnreadByte()
 						if err != nil {
-							return nil, NewError(err)
+							return nil, WrapError(err, "Failed to tokenize string")
 						}
 					}
 					continue
@@ -94,7 +94,7 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 						// read next byte
 						b, err = tokenizer.ReadByte()
 						if err != nil {
-							return nil, NewError(err)
+							return nil, WrapError(err, "Failed to tokenize string")
 						}
 
 						// if next byte is not part of the octal code
@@ -102,7 +102,7 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 							// unread the byte and stop collecting code
 							err = tokenizer.UnreadByte()
 							if err != nil {
-								return nil, NewError(err)
+								return nil, WrapError(err, "Failed to tokenize string")
 							}
 							break
 						}
@@ -114,7 +114,7 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 					// convert code into byte
 					val, err := strconv.ParseUint(string(code.Bytes()), 8, 8)
 					if err != nil {
-						return nil, NewError(err)
+						return nil, WrapError(err, "Failed to tokenize string")
 					}
 					b = byte(val)
 				}
@@ -146,14 +146,14 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 			// read in the next byte
 			b, err = tokenizer.ReadByte()
 			if err != nil {
-				return nil, NewError(err)
+				return nil, WrapError(err, "Failed to tokenize name")
 			}
 
 			// if the next byte is whitespace or delimiter then unread it and return the token
 			if bytes.IndexByte(delimiters, b) >= 0 || bytes.IndexByte(whitespace, b) >= 0 {
 				err = tokenizer.UnreadByte()
 				if err != nil {
-					return nil, NewError(err)
+					return nil, WrapError(err, "Failed to tokenize name")
 				}
 				return token, nil
 			}
@@ -163,17 +163,17 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 				// read the next 2 bytes
 				code, err := tokenizer.Peek(2)
 				if err != nil {
-					return nil, NewError(err)
+					return nil, WrapError(err, "Failed to tokenize name")
 				}
 				_, err = tokenizer.Discard(2)
 				if err != nil {
-					return nil, NewError(err)
+					return nil, WrapError(err, "Failed to tokenize name")
 				}
 
 				// convert the hex code to a byte
 				val, err := strconv.ParseUint(string(code), 16, 8)
 				if err != nil {
-					return nil, NewError(err)
+					return nil, WrapError(err, "Failed to tokenize name")
 				}
 				b = byte(val)
 			}
@@ -209,7 +209,7 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 				// add decoded byte to token
 				v, err := strconv.ParseUint(string([]byte{b, '0'}), 16, 8)
 				if err != nil {
-					return nil, NewError(err)
+					return nil, WrapError(err, "Invalid hex string character: %x", []byte{b, '0'})
 				}
 				token.WriteByte(byte(v))
 
@@ -221,7 +221,7 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 			// add decoded byte to token
 			v, err := strconv.ParseUint(string([]byte{b, b2}), 16, 8)
 			if err != nil {
-				return nil, NewError(err)
+				return nil, WrapError(err, "Invalid hex string character: %x", []byte{b, b2})
 			}
 			token.WriteByte(byte(v))
 
@@ -245,13 +245,13 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 		// get the next byte
 		b, err = tokenizer.ReadByte()
 		if err != nil {
-			return nil, NewError(err)
+			return nil, WrapError(err, "Failed to tokenizer dictionary end marker")
 		}
 		token.WriteByte(b)
 
 		// confirm token is a dictionary end
 		if b != '>' {
-			return nil, NewErrorf("Malformed dictionary end marker")
+			return nil, NewError("Malformed dictionary end marker")
 		}
 		return token, nil
 	}
@@ -264,14 +264,14 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 		// get next byte
 		b, err = tokenizer.ReadByte()
 		if err != nil {
-			return nil, NewError(err)
+			return nil, WrapError(err, "Failed to tokenize token")
 		}
 
 		// if byte is whitespace or delimiter then unread byte and return token
 		if bytes.IndexByte(whitespace, b) >= 0 || bytes.IndexByte(delimiters, b) >= 0 {
 			err = tokenizer.UnreadByte()
 			if err != nil {
-				return nil, NewError(err)
+				return nil, WrapError(err, "Failed to tokenize token")
 			}
 			return token, nil
 		}
@@ -289,7 +289,7 @@ func (tokenizer *Tokenizer) SkipWhitespace() (byte, error) {
 		// get next byte
 		b, err := tokenizer.ReadByte()
 		if err != nil {
-			return 0, NewError(err)
+			return 0, WrapError(err, "Failed to consume whitespace")
 		}
 
 		// advance if next byte is whitespace
@@ -301,7 +301,7 @@ func (tokenizer *Tokenizer) SkipWhitespace() (byte, error) {
 		if b == '%' {
 			_, err = tokenizer.ReadBytes('\n')
 			if err != nil {
-				return 0, NewError(err)
+				return 0, WrapError(err, "Failed to consume comment")
 			}
 			continue
 		}

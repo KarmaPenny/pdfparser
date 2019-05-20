@@ -43,8 +43,8 @@ func DecodeStream(filter string, data []byte, decode_parms_object Object) ([]byt
 		return LZWDecode(data, decode_parms)
 	}
 
-	// return error if filter is not supported
-	return data, NewErrUnsupported("Filter not supported: %s", filter)
+	// filter is not supported
+	return data, NewError("Filter not supported: %s", filter)
 }
 
 func ASCIIHexDecode(data []byte) ([]byte, error) {
@@ -68,7 +68,7 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 
 		// make sure it is valid character
 		if !IsHex(b1) {
-			return decoded_data, NewErrorf("Illegal character: %x", b1)
+			return decoded_data, NewError("ASCIIHexDecode: Illegal character: %x", b1)
 		}
 
 		// get the second byte defaulting to zero
@@ -86,7 +86,7 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 
 			// make sure it is valid character
 			if !IsHex(data[i+1]) {
-				return decoded_data, NewErrorf("Illegal character: %x", data[i+1])
+				return decoded_data, NewError("ASCIIHexDecode: Illegal character: %x", data[i+1])
 			}
 
 			// set second byte
@@ -98,7 +98,7 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 		// add decoded byte to decoded data
 		val, err := strconv.ParseUint(string([]byte{b1, b2}), 16, 8)
 		if err != nil {
-			return decoded_data, NewError(err)
+			return decoded_data, WrapError(err, "ASCIIHexDecode: Illegal character: %x", []byte{b1, b2})
 		}
 		b := byte(val)
 		decoded_data = append(decoded_data, b)
@@ -144,7 +144,7 @@ func ASCII85Decode(data []byte) ([]byte, error) {
 		// handle special case
 		if b == 'z' {
 			if n != 0 {
-				return decoded_data.Bytes(), NewErrorf("ASCII85 decode error: z character in middle of group")
+				return decoded_data.Bytes(), NewError("ASCII85Decode: z character in middle of group")
 			}
 
 			// write all zeros then continue
@@ -154,7 +154,7 @@ func ASCII85Decode(data []byte) ([]byte, error) {
 
 		// validate byte
 		if b < '!' || b > 'u' {
-			return decoded_data.Bytes(), NewErrorf("Invalid ASCII85 character: %x", b)
+			return decoded_data.Bytes(), NewError("ASCII85 decode: Invalid character %x", b)
 		}
 
 		// increment counter, multiply value by 85 then add value of new byte
@@ -224,7 +224,7 @@ func FlateDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
 	// create zlib reader from data
 	zlib_reader, err := zlib.NewReader(bytes.NewReader(data))
 	if err != nil {
-		return data, NewError(err)
+		return data, WrapError(err, "FlateDecode")
 	}
 	defer zlib_reader.Close()
 
@@ -232,7 +232,7 @@ func FlateDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
 	var decoded_data bytes.Buffer
 	bytes_read, err := decoded_data.ReadFrom(zlib_reader)
 	if bytes_read == 0 && err != nil {
-		return data, NewError(err)
+		return data, WrapError(err, "FlateDecode")
 	}
 
 	// reverse predictor
@@ -257,7 +257,7 @@ func LZWDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
 	var decoded_data bytes.Buffer
 	bytes_read, err := decoded_data.ReadFrom(lzw_reader)
 	if bytes_read == 0 && err != nil {
-		return data, NewError(err)
+		return data, WrapError(err, "LZWDecode")
 	}
 
 	// reverse predictor
@@ -285,15 +285,15 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 
 	// this is really hard with non byte length components so we don't support them
 	if bits_per_component != 8 {
-		return data, NewErrUnsupported("BitsPerComponent not supported: %d", bits_per_component)
+		return data, NewError("BitsPerComponent not supported: %d", bits_per_component)
 	}
 
 	// determine row widths
 	row_width := columns * colors
 
-	// throw error if row width is not positive
+	// invalid width
 	if row_width <= 0 {
-		return data, NewErrorf("Invalid row width: %d", row_width)
+		return data, NewError("Invalid predictor row width: %d", row_width)
 	}
 
 	// no predictor applied
@@ -408,5 +408,5 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 	}
 
 	// unknown predictor
-	return data, NewErrUnsupported("Predictor not supported: %d", predictor)
+	return data, NewError("Predictor not supported: %d", predictor)
 }

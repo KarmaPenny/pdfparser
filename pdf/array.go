@@ -27,7 +27,7 @@ func (a Array) GetInt(index int) (int, error) {
 	}
 	i, err := strconv.ParseInt(object.String(), 10, 32)
 	if err != nil {
-		return 0, NewError(err)
+		return 0, WrapError(err, "Array element at %d is not an int32: %s", index, object.String())
 	}
 	return int(i), nil
 }
@@ -39,19 +39,19 @@ func (a Array) GetInt64(index int) (int64, error) {
 	}
 	i, err := strconv.ParseInt(object.String(), 10, 64)
 	if err != nil {
-		return 0, NewError(err)
+		return 0, WrapError(err, "Array element at %d is not an int64: %s", index, object.String())
 	}
 	return i, nil
 }
 
 // GetObject gets an object from an array, resolving references if needed
 func (a Array) GetObject(index int) (Object, error) {
-	if index < len(a) {
+	if index < len(a) || index < 0 {
 		object := a[index]
 		if reference, ok := object.(*Reference); ok {
 			return reference.Resolve()
 		}
 		return object, nil
 	}
-	return nil, NewErrorf("Index out of bounds")
+	return nil, NewError("Array index [%d] out of bounds: %d", index, len(a))
 }

@@ -5,58 +5,41 @@ import (
 	"runtime/debug"
 )
 
-type ErrTrace struct {
+// error that includes stack trace
+type Error struct {
 	message string
 	trace []byte
 }
 
-func NewError(err error) *ErrTrace {
-	return &ErrTrace{err.Error(), debug.Stack()}
-}
-
-func NewErrorf(format string, a ...interface{}) *ErrTrace {
-	if len(a) == 0 {
-		return &ErrTrace{format, debug.Stack()}
+// NewError creates a new Error from a formatted message
+func NewError(format string, a ...interface{}) *Error {
+	message := format
+	if len(a) > 0 {
+		message = fmt.Sprintf(format, a)
 	}
-	return &ErrTrace{fmt.Sprintf(format, a), debug.Stack()}
+	return &Error{message, debug.Stack()}
 }
 
-func (err *ErrTrace) Error() string {
-	return err.message
+// WrapError prepends a formatted message to the start of an existing error
+func WrapError(err error, format string, a ...interface{}) *Error {
+	// use or create new error
+	e, ok := err.(*Error)
+	if !ok {
+		e = NewError(err.Error())
+	}
+
+	// wrap the message
+	wrap := format
+	if len(a) > 0 {
+		wrap = fmt.Sprintf(format, a)
+	}
+	e.message = fmt.Sprintf("%s: %s", wrap, e.message)
+
+	// return new error
+	return e
 }
 
-func (err *ErrTrace) Trace() string {
-	return string(err.trace)
-}
-
-type ErrUnsupported struct {
-	message string
-}
-
-func NewErrUnsupported(message string, a ...interface{}) *ErrUnsupported {
-	return &ErrUnsupported{fmt.Sprintf(message, a)}
-}
-
-func (err *ErrUnsupported) Error() string {
-	return err.message
-}
-
-type ErrEncrypted struct {}
-
-func NewErrEncrypted() *ErrEncrypted {
-	return &ErrEncrypted{}
-}
-
-func (err *ErrEncrypted) Error() string {
-	return "Pdf encryption not supported"
-}
-
-type ErrXref struct {}
-
-func NewErrXref() *ErrXref {
-	return &ErrXref{}
-}
-
-func (err *ErrXref) Error() string {
-	return "Failed to load xref"
+// implement error interface
+func (err *Error) Error() string {
+	return fmt.Sprintf("%s\n%s", err.message, string(err.trace))
 }

@@ -19,11 +19,11 @@ type Reader struct {
 	xref_offsets map[int64]interface{}
 }
 
-// NewPdf opens the file at path and returns a pdf object
+// Open opens the file at path, loads the xref table and returns a pdf reader
 func Open(path string) (*Reader, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, NewError(err)
+		return nil, WrapError(err, "Failed to open %s", path)
 	}
 	pdf := &Reader{file, NewTokenizer(file), map[int64]*XrefEntry{}, map[int64]interface{}{}}
 
@@ -31,14 +31,14 @@ func Open(path string) (*Reader, error) {
 	start_xref_offset, err := pdf.getStartXrefOffset()
 	if err != nil {
 		pdf.Close()
-		return nil, NewErrXref()
+		return nil, err
 	}
 
 	// load the cross reference table
 	err = pdf.loadXref(start_xref_offset)
 	if err != nil {
 		pdf.Close()
-		return nil, NewErrXref()
+		return nil, err
 	}
 
 	return pdf, nil
@@ -49,7 +49,7 @@ func (pdf *Reader) Seek(offset int64, whence int) (int64, error) {
 	pdf.tokenizer.Reset(pdf)
 	new_offset, err := pdf.File.Seek(offset, whence)
 	if err != nil {
-		return new_offset, NewError(err)
+		return new_offset, WrapError(err, "Failed to seek to %d", offset)
 	}
 	return new_offset, nil
 }
@@ -58,7 +58,7 @@ func (pdf *Reader) Seek(offset int64, whence int) (int64, error) {
 func (pdf *Reader) CurrentOffset() (int64, error) {
 	offset, err := pdf.File.Seek(0, io.SeekCurrent)
 	if err != nil {
-		return 0, NewError(err)
+		return 0, WrapError(err, "Failed to get current file offset")
 	}
 	return offset - int64(pdf.tokenizer.Buffered()), nil
 }
@@ -85,7 +85,7 @@ func (pdf *Reader) getStartXrefOffset() (int64, error) {
 		buffer := make([]byte, start_xref_scan_buffer_size)
 		_, err = pdf.ReadAt(buffer, offset)
 		if err != nil && err != io.EOF {
-			return 0, NewError(err)
+			return 0, WrapError(err, "Scan for start xref marker failed")
 		}
 
 		// check for start xref
@@ -94,14 +94,14 @@ func (pdf *Reader) getStartXrefOffset() (int64, error) {
 			// return the last most start xref offset
 			start_xref_offset, err := strconv.ParseInt(string(matches[len(matches)-1][1]), 10, 64)
 			if err != nil {
-				return 0, NewError(err)
+				return 0, WrapError(err, "Start xref offset is not int64: %s", string(matches[len(matches)-1][1]))
 			}
 			return start_xref_offset, nil
 		}
 	}
 
 	// start xref not found
-	return 0, NewErrorf("Start xref not found")
+	return 0, NewError("Start xref marker not found")
 }
 
 // loadXref loads an xref section starting at offset into pdf.Xref
@@ -152,7 +152,7 @@ func (pdf *Reader) readXrefTable() error {
 		// get subsection start
 		subsection_start, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
-			return NewError(err)
+			return WrapError(err, "xref subsection start is not int64: %s", s)
 		}
 
 		// find next xref subsection length
@@ -170,7 +170,7 @@ func (pdf *Reader) readXrefTable() error {
 			}
 			byte_offset, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
-				return NewError(err)
+				return WrapError(err, "xref entry offset is not int64: %s", s)
 			}
 
 			// find xref entry generation
@@ -180,7 +180,7 @@ func (pdf *Reader) readXrefTable() error {
 			}
 			generation, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
-				return NewError(err)
+				return WrapError(err, "xref entry generation is not int64: %s", s)
 			}
 
 			// find xref entry in use flag
@@ -213,7 +213,7 @@ func (pdf *Reader) readXrefTable() error {
 
 	// check if pdf is encrypted
 	if _, err := trailer.GetObject("/Encrypt"); err == nil {
-		return NewErrEncrypted()
+		return NewError("Encrypted")
 	}
 
 	// load previous xref section if it exists
@@ -244,7 +244,7 @@ func (pdf *Reader) readXrefStream() error {
 
 	// check if pdf is encrypted
 	if _, err := trailer.GetObject("/Encrypt"); err == nil {
-		return NewErrEncrypted()
+		return NewError("Encrypted")
 	}
 
 	// get the index and width arrays
@@ -344,38 +344,38 @@ func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
 		// seek to start of object
 		_, err := pdf.Seek(xref_entry.Offset, io.SeekStart)
 		if err != nil {
-			return object, err
+			return object, WrapError(err, "Failed to read object %d", number)
 		}
 
 		// get object number
 		_, err = pdf.NextInt64()
 		if err != nil {
-			return object, err
+			return object, WrapError(err, "Failed to read object %d", number)
 		}
 
 		// get generation number
 		object.Generation, err = pdf.NextInt64()
 		if err != nil {
-			return object, err
+			return object, WrapError(err, "Failed to read object %d", number)
 		}
 
 		// skip obj start marker
 		_, err = pdf.NextString()
 		if err != nil {
-			return object, err
+			return object, WrapError(err, "Failed to read object %d", number)
 		}
 
 		// get the value of the reference
 		object.Value, err = pdf.NextObject()
 		if err != nil {
-			return object, err
+			return object, WrapError(err, "Failed to read object %d", number)
 		}
 
 		// get next string
 		var s string
 		s, err = pdf.NextString()
 		if err != nil {
-			return object, err
+			return object, WrapError(err, "Failed to read object %d", number)
 		}
 
 		// if this is a stream object
@@ -383,11 +383,11 @@ func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
 			if d, ok := object.Value.(Dictionary); ok {
 				object.Stream, err = pdf.ReadStream(d)
 				if err != nil {
-					return object, err
+					return object, WrapError(err, "Failed to read object %d", number)
 				}
 				return object, nil
 			}
-			return object, NewErrorf("Stream has no dictionary")
+			return object, NewError("Failed to read object %d: Stream has no dictionary", number)
 		}
 	}
 	return object, nil
@@ -397,7 +397,7 @@ func (pdf *Reader) ReadStream(d Dictionary) ([]byte, error) {
 	// read until new line
 	_, err := pdf.tokenizer.ReadBytes('\n')
 	if err != nil {
-		return nil, NewError(err)
+		return nil, WrapError(err, "Start of stream not found")
 	}
 
 	// get length of stream from dictionary
@@ -410,7 +410,7 @@ func (pdf *Reader) ReadStream(d Dictionary) ([]byte, error) {
 	stream_data := make([]byte, stream_length)
 	bytes_read, err := pdf.tokenizer.Read(stream_data)
 	if bytes_read == 0 && err != nil {
-		return nil, NewError(err)
+		return nil, WrapError(err, "Failed to read stream data")
 	}
 
 	// get list of filters
@@ -461,7 +461,7 @@ func (pdf *Reader) NextInt64() (int64, error) {
 	}
 	value, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return value, NewError(err)
+		return value, WrapError(err, "Expected int64 but got %s", s)
 	}
 	return value, nil
 }
@@ -474,7 +474,7 @@ func (pdf *Reader) NextString() (string , error) {
 	if s, ok := object.(*Token); ok {
 		return s.String(), nil
 	}
-	return "", NewErrorf("Expected string")
+	return "", NewError("Expected string but got %s", object.String())
 }
 
 func (pdf *Reader) NextDictionary() (Dictionary, error) {
@@ -485,7 +485,7 @@ func (pdf *Reader) NextDictionary() (Dictionary, error) {
 	if d, ok := object.(Dictionary); ok {
 		return d, nil
 	}
-	return nil, NewErrorf("Expected Dictionary")
+	return nil, NewError("Expected Dictionary but got %s", object.String())
 }
 
 func (pdf *Reader) NextObject() (fmt.Stringer, error) {
@@ -509,11 +509,11 @@ func (pdf *Reader) NextObject() (fmt.Stringer, error) {
 		if err1 == nil && err2 == nil && generation_token.IsNumber && reference_token.String() == "R" {
 			number, err := strconv.ParseInt(token.String(), 10, 64)
 			if err != nil {
-				return nil, NewError(err)
+				return nil, WrapError(err, "Failed to parse reference number: %s", token.String())
 			}
 			generation, err := strconv.ParseInt(generation_token.String(), 10, 64)
 			if err != nil {
-				return nil, NewError(err)
+				return nil, WrapError(err, "Failed to parse reference generation: %s", generation_token.String())
 			}
 			return NewReference(pdf, number, generation), nil
 		}

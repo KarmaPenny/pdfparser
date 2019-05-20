@@ -26,7 +26,7 @@ func (d Dictionary) GetInt(key string) (int, error) {
 	}
 	i, err := strconv.ParseInt(object.String(), 10, 32)
 	if err != nil {
-		return 0, NewError(err)
+		return 0, WrapError(err, "Dictionary value at %s is not int32: %s", key, object.String())
 	}
 	return int(i), nil
 }
@@ -38,7 +38,7 @@ func (d Dictionary) GetInt64(key string) (int64, error) {
 	}
 	i, err := strconv.ParseInt(object.String(), 10, 64)
 	if err != nil {
-		return 0, NewError(err)
+		return 0, WrapError(err, "Dictionary value at %s is not int64: %s", key, object.String())
 	}
 	return i, nil
 }
@@ -51,7 +51,7 @@ func (d Dictionary) GetArray(key string) (Array, error) {
 	if array, ok := object.(Array); ok {
 		return array, nil
 	}
-	return nil, NewErrorf("Expected Array")
+	return nil, WrapError(err, "Dictionary value at %s is not Array: %s", key, object.String())
 }
 
 // GetObjectFromDictionary gets an object from a dictionary, resolving references if needed
@@ -62,5 +62,5 @@ func (d Dictionary) GetObject(key string) (Object, error) {
 		}
 		return object, nil
 	}
-	return nil, NewErrorf("Missing key: %s", key)
+	return nil, NewError("Dictionary does not contain key: %s", key)
 }
