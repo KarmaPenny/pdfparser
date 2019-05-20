@@ -288,9 +288,8 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 		return data, NewErrUnsupported("BitsPerComponent not supported: %d", bits_per_component)
 	}
 
-	// determine sample and row widths
-	sample_width := colors
-	row_width := columns * sample_width
+	// determine row widths
+	row_width := columns * colors
 
 	// throw error if row width is not positive
 	if row_width <= 0 {
@@ -304,9 +303,15 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 
 	// TIFF predictor
 	if predictor == 2 {
-		for r := 0; r < len(data); r += row_width {
-			for c := 1; c < row_width && r + c < len(data); c++ {
-				data[r + c] = byte((int(data[r + c]) + int(data[r + c - 1])) % 256)
+		for r := 0; r * row_width < len(data); r ++ {
+			for c := 1; c < columns; c++ {
+				for i := 0; i < colors; i++ {
+					pos := r * row_width + c * colors + i
+					if pos > len(data) {
+						break
+					}
+					data[pos] = byte((int(data[pos]) + int(data[pos - colors])) % 256)
+				}
 			}
 		}
 		return data, nil
