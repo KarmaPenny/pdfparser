@@ -21,7 +21,7 @@ type Error struct {
 func NewError(format string, a ...interface{}) *Error {
 	message := format
 	if len(a) > 0 {
-		message = fmt.Sprintf(format, a)
+		message = fmt.Sprintf(format, a...)
 	}
 	return &Error{message, debug.Stack()}
 }
@@ -37,7 +37,7 @@ func WrapError(err error, format string, a ...interface{}) *Error {
 	// wrap the message
 	wrap := format
 	if len(a) > 0 {
-		wrap = fmt.Sprintf(format, a)
+		wrap = fmt.Sprintf(format, a...)
 	}
 	e.message = fmt.Sprintf("%s: %s", wrap, e.message)
 
