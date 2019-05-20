@@ -5,6 +5,12 @@ import (
 	"runtime/debug"
 )
 
+// ErrorUnsupported used to stop execution without reporting an error
+var ErrorUnsupported *Error = NewError("Unsupported")
+
+// ErrorEncrypted used to prevent opening pdf
+var ErrorEncrypted *Error = NewError("Encrypted")
+
 // error that includes stack trace
 type Error struct {
 	message string
@@ -43,6 +49,3 @@ func WrapError(err error, format string, a ...interface{}) *Error {
 func (err *Error) Error() string {
 	return fmt.Sprintf("%s\n%s", err.message, string(err.trace))
 }
-
-// ErrorUnsupported type used to stop execution without reporting an error
-var ErrorUnsupported *Error = NewError("Unsupported")

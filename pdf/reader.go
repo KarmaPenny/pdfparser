@@ -30,14 +30,18 @@ func Open(path string) (*Reader, error) {
 	// get the offset to the first xref table
 	start_xref_offset, err := pdf.getStartXrefOffset()
 	if err != nil {
-		RepairXref()
+		pdf.RepairXref()
 		return pdf, nil
 	}
 
 	// load the cross reference table
 	err = pdf.loadXref(start_xref_offset)
 	if err != nil {
-		RepairXref()
+		if err == ErrorEncrypted {
+			pdf.Close()
+			return nil, err
+		}
+		pdf.RepairXref()
 		return pdf, nil
 	}
 
@@ -213,7 +217,7 @@ func (pdf *Reader) readXrefTable() error {
 
 	// check if pdf is encrypted
 	if _, err := trailer.GetObject("/Encrypt"); err == nil {
-		return NewError("Encrypted")
+		return ErrorEncrypted
 	}
 
 	// load previous xref section if it exists
@@ -244,7 +248,7 @@ func (pdf *Reader) readXrefStream() error {
 
 	// check if pdf is encrypted
 	if _, err := trailer.GetObject("/Encrypt"); err == nil {
-		return NewError("Encrypted")
+		return ErrorEncrypted
 	}
 
 	// get the index and width arrays
@@ -335,7 +339,7 @@ func (pdf *Reader) readXrefStream() error {
 }
 
 // RepairXref attempt to rebuild the xref table by locating all obj start markers in the pdf file
-func RepairXref() {
+func (pdf *Reader) RepairXref() {
 	// TODO: implement repair xref
 }
 
