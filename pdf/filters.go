@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"bytes"
+	"compress/flate"
 	"compress/lzw"
 	"compress/zlib"
 	"encoding/binary"
@@ -222,9 +223,13 @@ func RunLengthDecode(data []byte) ([]byte, error) {
 
 func FlateDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
 	// create zlib reader from data
-	zlib_reader, err := zlib.NewReader(bytes.NewReader(data))
+	byte_reader := bytes.NewReader(data)
+	zlib_reader, err := zlib.NewReader(byte_reader)
 	if err != nil {
-		return data, WrapError(err, "FlateDecode")
+		if err != zlib.ErrHeader {
+			return data, WrapError(err, "FlateDecode")
+		}
+		zlib_reader = flate.NewReader(byte_reader)
 	}
 	defer zlib_reader.Close()
 
