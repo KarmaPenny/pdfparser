@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"compress/lzw"
 	"compress/zlib"
-	"encoding/ascii85"
+	"encoding/binary"
 	"io"
 	"math"
 	"strconv"
@@ -112,13 +112,67 @@ func IsHex(b byte) bool {
 }
 
 func ASCII85Decode(data []byte) ([]byte, error) {
-	decoder := ascii85.NewDecoder(bytes.NewReader(data))
-	var decoded_data bytes.Buffer
-	bytes_read, err := decoded_data.ReadFrom(decoder)
-	if bytes_read == 0 && err != nil {
-		return data, NewError(err)
+	reader := bytes.NewReader(data)
+	decoded_data := bytes.NewBuffer([]byte{})
+
+	v := uint32(0)
+	n := 0
+
+	for {
+		b, err := reader.ReadByte()
+		if err != nil || b == '~' {
+			// finish partial group by adding zeros
+			if n > 1 {
+				for m := n; m < 5; m++ {
+					v *= 85
+				}
+
+				// write result in big endian order
+				buff := make([]byte, 4)
+				binary.BigEndian.PutUint32(buff, v)
+				decoded_data.Write(buff[:n-1])
+			}
+
+			return decoded_data.Bytes(), nil
+		}
+
+		// skip whitespace
+		if bytes.IndexByte(whitespace, b) >= 0 {
+			continue
+		}
+
+		// handle special case
+		if b == 'z' {
+			if n != 0 {
+				return decoded_data.Bytes(), NewErrorf("ASCII85 decode error: z character in middle of group")
+			}
+
+			// write all zeros then continue
+			decoded_data.Write([]byte{0,0,0,0})
+			continue
+		}
+
+		// validate byte
+		if b < '!' || b > 'u' {
+			return decoded_data.Bytes(), NewErrorf("Invalid ASCII85 character: %x", b)
+		}
+
+		// increment counter, multiply value by 85 then add value of new byte
+		n++
+		v *= 85
+		v += uint32(b) - 33
+
+		if n >= 5 {
+			// write result in big endian order
+			buff := make([]byte, 4)
+			binary.BigEndian.PutUint32(buff, v)
+			decoded_data.Write(buff)
+
+			// reset value and count
+			v = 0
+			n =0
+		}
 	}
-	return decoded_data.Bytes(), nil
 }
 
 func RunLengthDecode(data []byte) ([]byte, error) {

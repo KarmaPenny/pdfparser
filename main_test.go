@@ -203,9 +203,14 @@ func TestASCII85DecodeFilter(test *testing.T) {
 	defer reader.Close()
 
 	// read the first object
-	_, err = reader.ReadObject(1)
+	object, err := reader.ReadObject(1)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
+	}
+
+	// assert object stream is correct
+	if string(object.Stream) != "\x00\x00\x00\x00%!FontType" {
+		test.Fatalf("incorrect stream value: %s", string(object.Stream))
 	}
 }
 
