@@ -43,3 +43,6 @@ func WrapError(err error, format string, a ...interface{}) *Error {
 func (err *Error) Error() string {
 	return fmt.Sprintf("%s\n%s", err.message, string(err.trace))
 }
+
+// ErrorUnsupported type used to stop execution without reporting an error
+var ErrorUnsupported *Error = NewError("Unsupported")

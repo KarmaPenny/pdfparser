@@ -30,15 +30,15 @@ func Open(path string) (*Reader, error) {
 	// get the offset to the first xref table
 	start_xref_offset, err := pdf.getStartXrefOffset()
 	if err != nil {
-		pdf.Close()
-		return nil, err
+		RepairXref()
+		return pdf, nil
 	}
 
 	// load the cross reference table
 	err = pdf.loadXref(start_xref_offset)
 	if err != nil {
-		pdf.Close()
-		return nil, err
+		RepairXref()
+		return pdf, nil
 	}
 
 	return pdf, nil
@@ -334,6 +334,11 @@ func (pdf *Reader) readXrefStream() error {
 	return nil
 }
 
+// RepairXref attempt to rebuild the xref table by locating all obj start markers in the pdf file
+func RepairXref() {
+	// TODO: implement repair xref
+}
+
 // ReadObject reads an object by looking up the number in the xref table
 func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
 	// create a new indirect object
@@ -440,6 +445,10 @@ func (pdf *Reader) ReadStream(d Dictionary) ([]byte, error) {
 			}
 			stream_data, err = DecodeStream(f.String(), stream_data, decode_parms_list_object)
 			if err != nil {
+				// dont display unsupported error
+				if err == ErrorUnsupported {
+					return stream_data, nil
+				}
 				return stream_data, err
 			}
 		}
@@ -449,6 +458,10 @@ func (pdf *Reader) ReadStream(d Dictionary) ([]byte, error) {
 	// if filter is a single filter then apply it
 	stream_data, err = DecodeStream(filter.String(), stream_data, decode_parms_object)
 	if err != nil {
+		// dont display unsupported error
+		if err == ErrorUnsupported {
+			return stream_data, nil
+		}
 		return stream_data, err
 	}
 	return stream_data, nil
