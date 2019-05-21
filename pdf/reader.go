@@ -541,7 +541,7 @@ func (pdf *Reader) NextInt64() (int64, error) {
 	}
 	value, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return value, WrapError(err, "Expected int64 but got %s", s)
+		return value, WrapError(err, "Expected int64")
 	}
 	return value, nil
 }
@@ -554,7 +554,7 @@ func (pdf *Reader) NextString() (string , error) {
 	if s, ok := object.(*Token); ok {
 		return s.String(), nil
 	}
-	return "", NewError("Expected string but got %s", object.String())
+	return "", NewError("Expected string")
 }
 
 func (pdf *Reader) NextDictionary() (Dictionary, error) {
@@ -565,7 +565,7 @@ func (pdf *Reader) NextDictionary() (Dictionary, error) {
 	if d, ok := object.(Dictionary); ok {
 		return d, nil
 	}
-	return nil, NewError("Expected Dictionary but got %s", object.String())
+	return nil, NewError("Expected Dictionary")
 }
 
 func (pdf *Reader) NextObject() (fmt.Stringer, error) {
