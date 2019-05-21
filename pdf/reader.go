@@ -349,38 +349,46 @@ func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
 		// seek to start of object
 		_, err := pdf.Seek(xref_entry.Offset, io.SeekStart)
 		if err != nil {
-			return object, WrapError(err, "Failed to read object %d", number)
+			return object, WrapError(err, "Unable to seek to start of object %d", number)
 		}
 
 		// get object number
-		_, err = pdf.NextInt64()
+		n, err := pdf.NextInt64()
 		if err != nil {
-			return object, WrapError(err, "Failed to read object %d", number)
+			return object, WrapError(err, "Invalid object number for object %d", number)
+		}
+		if n != number {
+			return object, NewError("Object number does not match cross reference: %d != %d", n, number)
 		}
 
 		// get generation number
 		object.Generation, err = pdf.NextInt64()
 		if err != nil {
-			return object, WrapError(err, "Failed to read object %d", number)
+			return object, WrapError(err, "Invalid object generation for object %d", number)
+		}
+		if object.Generation != xref_entry.Generation {
+			return object, NewError("Object generation does not match cross reference: %d != %d", object.Generation, xref_entry.Generation)
 		}
 
 		// skip obj start marker
-		_, err = pdf.NextString()
+		obj_start, err := pdf.NextString()
 		if err != nil {
-			return object, WrapError(err, "Failed to read object %d", number)
+			return object, WrapError(err, "Failed to read obj start marker for object %d", number)
+		}
+		if obj_start != "obj" {
+			return object, NewError("Malformed obj start marker for object %d", number)
 		}
 
 		// get the value of the object
 		object.Value, err = pdf.NextObject()
 		if err != nil {
-			return object, WrapError(err, "Failed to read object %d", number)
+			return object, WrapError(err, "Failed to read object value for object %d", number)
 		}
 
 		// get next string
-		var s string
-		s, err = pdf.NextString()
+		s, err := pdf.NextString()
 		if err != nil {
-			return object, WrapError(err, "Failed to read object %d", number)
+			return object, WrapError(err, "Failed to read object end marker for object %d", number)
 		}
 
 		// if this is a stream object
@@ -388,11 +396,13 @@ func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
 			if d, ok := object.Value.(Dictionary); ok {
 				object.Stream, err = pdf.ReadStream(d)
 				if err != nil {
-					return object, WrapError(err, "Failed to read object %d", number)
+					return object, WrapError(err, "Failed to read object stream for object %d", number)
 				}
 				return object, nil
 			}
-			return object, NewError("Failed to read object %d: Stream has no dictionary", number)
+			return object, NewError("Missing stream dictionary for object %d", number)
+		} else if s != "endobj" {
+			return object, NewError("Malformed endobj marker for object %d", number)
 		}
 	}
 	return object, nil
