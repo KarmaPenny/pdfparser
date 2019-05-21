@@ -11,6 +11,7 @@ import (
 
 var start_xref_scan_buffer_size int64 = 256
 var start_xref_regexp = regexp.MustCompile(`startxref\s*(\d+)\s*%%EOF`)
+var start_obj_regexp = regexp.MustCompile(`\d+([\s\x00]|(%[^\n]*\n))+\d+([\s\x00]|(%[^\n]*\n))+obj`)
 
 type Parser struct {
 	*os.File
@@ -26,24 +27,26 @@ func Open(path string) (*Parser, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Parser{file, NewTokenizer(file), map[int64]*XrefEntry{}, map[int64]interface{}{}, nil}, nil
-}
+	pdf := &Parser{file, NewTokenizer(file), map[int64]*XrefEntry{}, map[int64]interface{}{}, nil}
 
-func (pdf *Parser) LoadXref() error {
-	// get the offset to the first xref table
-	start_xref_offset, err := pdf.getStartXrefOffset()
-	if err != nil {
-		return err
+	// find the start xref offset and load the xref
+	if start_xref_offset, err := pdf.getStartXrefOffset(); err == nil {
+		// load the xref from start xref offset
+		if err = pdf.loadXref(start_xref_offset); err == nil {
+			// validate xref
+			if pdf.IsXrefValid() {
+				return pdf, nil
+			}
+		}
 	}
 
-	// load the xref from start xref offset
-	err = pdf.loadXref(start_xref_offset)
+	// attempt to repair the xref
+	err = pdf.RepairXref()
 	if err != nil {
-		return err
+		pdf.Close()
+		return nil, err
 	}
-
-	// validate xref
-	return pdf.ValidateXref()
+	return pdf, nil
 }
 
 // Seek seeks the io.Parser to offset and resets the tokenizer
@@ -214,7 +217,9 @@ func (pdf *Parser) readXrefTable() error {
 
 	// set encrypt dictionary if there isnt one already
 	if !pdf.IsEncrypted() {
-		pdf.Encrypt, _ = trailer.GetDictionary("/Encrypt");
+		if encrypt, err := trailer.GetDictionary("/Encrypt"); err == nil {
+			pdf.Encrypt = encrypt
+		}
 	}
 
 	// load previous xref section if it exists
@@ -324,7 +329,9 @@ func (pdf *Parser) readXrefStream() error {
 
 	// set encrypt dictionary if there isnt one already
 	if !pdf.IsEncrypted() {
-		pdf.Encrypt, _ = trailer.GetDictionary("/Encrypt");
+		if encrypt, err := trailer.GetDictionary("/Encrypt"); err == nil {
+			pdf.Encrypt = encrypt
+		}
 	}
 
 	// load previous xref section if it exists
@@ -335,51 +342,91 @@ func (pdf *Parser) readXrefStream() error {
 	return nil
 }
 
-// ValidateXref checks to make sure that the loaded xref data actually points to objects
-func (pdf *Parser) ValidateXref() error {
-	count := 0
+// IsXrefValid return true if the loaded xref data actually points to objects
+func (pdf *Parser) IsXrefValid() bool {
 	for n, entry := range pdf.Xref {
 		if entry.Type == XrefTypeIndirectObject {
 			// seek to start of object
 			if _, err := pdf.Seek(entry.Offset, io.SeekStart); err != nil {
-				return WrapError(err, "Unable to seek to start of object %d", n)
+				return false
 			}
 
 			// get object number
 			if _, err := pdf.NextInt64(); err != nil {
-				return NewError("Invalid object number for object %d", n)
+				return false
 			}
 
 			// get generation number
 			if _, err := pdf.NextInt64(); err != nil {
-				return NewError("Invalid object generation for object %d", n)
+				return false
 			}
 
 			// skip obj start marker
 			if _, err := pdf.NextString(); err != nil {
-				return WrapError(err, "Failed to read obj start marker for object %d", n)
+				return false
 			}
 
 			// update xref to skip obj header
 			new_offset, err := pdf.CurrentOffset()
 			if err != nil {
-				return WrapError(err, "Failed to update xref offset")
+				return false
 			}
 			pdf.Xref[n].Offset = new_offset
 		}
-		count++
 	}
-
-	if count == 0 {
-		return NewError("Xref is empty")
-	}
-
-	return nil
+	return true
 }
 
-// RepairXref attempt to rebuild the xref table by locating all obj start markers in the pdf file
-func (pdf *Parser) RepairXref() {
-	// TODO: implement repair xref
+// RepairXref attempts to rebuild the xref table by locating all obj start markers in the pdf file
+func (pdf *Parser) RepairXref() error {
+	// clear the xref
+	pdf.Xref = map[int64]*XrefEntry{}
+
+	// jump to start of file
+	offset, err := pdf.Seek(0, io.SeekStart)
+	if err != nil {
+		return err
+	}
+
+	for {
+		// scan for object start marker
+		index := start_obj_regexp.FindReaderIndex(pdf.tokenizer)
+		if index == nil {
+			break
+		}
+
+		// seek to start of object
+		_, err := pdf.Seek(offset + int64(index[0]), io.SeekStart)
+		if err != nil {
+			return err
+		}
+
+		// get object number
+		n, err := pdf.NextInt64()
+		if err != nil {
+			return NewError("Invalid object number for object %d", n)
+		}
+
+		// get generation number
+		g, err := pdf.NextInt64()
+		if err != nil {
+			return NewError("Invalid object generation for object %d", n)
+		}
+
+		// skip obj start marker
+		_, err = pdf.NextString()
+		if err != nil {
+			return WrapError(err, "Failed to read obj start marker for object %d", n)
+		}
+
+		// update xref to skip obj header
+		offset, err = pdf.CurrentOffset()
+		if err != nil {
+			return WrapError(err, "Failed to update xref offset")
+		}
+		pdf.Xref[n] = NewXrefEntry(offset, g, XrefTypeIndirectObject)
+	}
+	return nil
 }
 
 // ReadObject reads an object by looking up the number in the xref table

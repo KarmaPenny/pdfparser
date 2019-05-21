@@ -13,18 +13,38 @@ func LoadTestPdf(pdf_name string) (*pdf.Parser, error) {
 	_, test_path, _, _ := runtime.Caller(0)
 	test_dir := filepath.Dir(test_path)
 	path := filepath.Join(test_dir, "test", pdf_name)
-	parser, err := pdf.Open(path)
+	return pdf.Open(path)
+}
+
+func TestRepairXref(test *testing.T) {
+	// load the pdf to test
+	parser, err := LoadTestPdf("repair_xref_test.pdf")
 	if err != nil {
-		return nil, err
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// read the object 1
+	object, err := parser.ReadObject(1)
+	if err != nil {
+		test.Fatalf("Failed to read object: %s", err)
 	}
 
-	// load the cross reference
-	if err := parser.LoadXref(); err != nil {
-		// try to repair a bad cross reference
-		parser.RepairXref()
+	// assert object 1 value is correct
+	if object.Value.String() != "(Hello)" {
+		test.Fatalf("Incorrect string value: %s", object.Value.String())
 	}
 
-	return parser, nil
+	// read the object 3
+	object, err = parser.ReadObject(3)
+	if err != nil {
+		test.Fatalf("Failed to read object: %s", err)
+	}
+
+	// assert object 2 value is correct
+	if object.Value.String() != "(World)" {
+		test.Fatalf("Incorrect string value: %s", object.Value.String())
+	}
 }
 
 // Make sure the default values for index are used if the index array is not present
@@ -199,7 +219,7 @@ func TestMultipleXrefTable(test *testing.T) {
 
 	// assert xref length is 10
 	if len(parser.Xref) != 10 {
-		test.Fatalf("Incorrect number of objects in xref")
+		test.Fatalf("Incorrect number of objects in xref: %d", len(parser.Xref))
 	}
 }
 

@@ -15,13 +15,6 @@ func main() {
 	}
 	defer parser.Close()
 
-	// load the cross reference
-	if err := parser.LoadXref(); err != nil {
-		// try to repair a bad cross reference
-		fmt.Fprintf(os.Stderr, "Bad Xref: %s", err)
-		parser.RepairXref()
-	}
-
 	// check if pdf is encrypted
 	if parser.IsEncrypted() {
 		fmt.Fprintln(os.Stderr, "Encrypted")
@@ -38,6 +31,6 @@ func main() {
 		}
 
 		// print object
-		fmt.Fprint(os.Stdout, object)
+		object.Fprint(os.Stdout)
 	}
 }
