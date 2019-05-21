@@ -344,56 +344,63 @@ func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
 	// create a new indirect object
 	object := NewIndirectObject(number)
 
-	// TODO: add support for compressed object type
-	if xref_entry, ok := pdf.Xref[number]; ok && xref_entry.Type == XrefTypeIndirectObject {
-		// seek to start of object
-		_, err := pdf.Seek(xref_entry.Offset, io.SeekStart)
-		if err != nil {
-			return object, WrapError(err, "Unable to seek to start of object %d", number)
-		}
+	if xref_entry, ok := pdf.Xref[number]; ok {
+		// set the generation number
+		object.Generation = xref_entry.Generation
 
-		// get object number
-		_, err = pdf.NextInt64()
-		if err != nil {
-			return object, WrapError(err, "Invalid object number for object %d", number)
-		}
-
-		// get generation number
-		_, err = pdf.NextInt64()
-		if err != nil {
-			return object, WrapError(err, "Invalid object generation for object %d", number)
-		}
-
-		// skip obj start marker
-		_, err = pdf.NextString()
-		if err != nil {
-			return object, WrapError(err, "Failed to read obj start marker for object %d", number)
-		}
-
-		// get the value of the object
-		object.Value, err = pdf.NextObject()
-		if err != nil {
-			return object, WrapError(err, "Failed to read object value for object %d", number)
-		}
-
-		// get next string
-		s, err := pdf.NextString()
-		if err != nil {
-			return object, WrapError(err, "Failed to read object end marker for object %d", number)
-		}
-
-		// if this is a stream object
-		if s == "stream" {
-			if d, ok := object.Value.(Dictionary); ok {
-				object.Stream, err = pdf.ReadStream(d)
-				if err != nil {
-					return object, WrapError(err, "Failed to read object stream for object %d", number)
-				}
-				return object, nil
+		// if object is in use
+		if xref_entry.Type == XrefTypeIndirectObject {
+			// seek to start of object
+			_, err := pdf.Seek(xref_entry.Offset, io.SeekStart)
+			if err != nil {
+				return object, WrapError(err, "Unable to seek to start of object %d", number)
 			}
-			return object, NewError("Missing stream dictionary for object %d", number)
+
+			// get object number
+			_, err = pdf.NextInt64()
+			if err != nil {
+				return object, NewError("Invalid object number for object %d", number)
+			}
+
+			// get generation number
+			_, err = pdf.NextInt64()
+			if err != nil {
+				return object, NewError("Invalid object generation for object %d", number)
+			}
+
+			// skip obj start marker
+			_, err = pdf.NextString()
+			if err != nil {
+				return object, WrapError(err, "Failed to read obj start marker for object %d", number)
+			}
+
+			// get the value of the object
+			object.Value, err = pdf.NextObject()
+			if err != nil {
+				return object, WrapError(err, "Failed to read object value for object %d", number)
+			}
+
+			// get next string
+			s, err := pdf.NextString()
+			if err != nil {
+				return object, WrapError(err, "Failed to read object end marker for object %d", number)
+			}
+
+			// if this is a stream object
+			if s == "stream" {
+				if d, ok := object.Value.(Dictionary); ok {
+					object.Stream, err = pdf.ReadStream(d)
+					if err != nil {
+						return object, WrapError(err, "Failed to read object stream for object %d", number)
+					}
+					return object, nil
+				}
+				return object, NewError("Missing stream dictionary for object %d", number)
+			}
 		}
 	}
+
+	// object not found, return null object
 	return object, nil
 }
 
