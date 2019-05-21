@@ -291,7 +291,7 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 
 	// this is really hard with non byte length components so we don't support them
 	if bits_per_component != 8 {
-		return data, NewError("BitsPerComponent not supported: %d", bits_per_component)
+		return data, ErrorUnsupported
 	}
 
 	// determine row widths
