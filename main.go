@@ -18,7 +18,7 @@ func main() {
 	// load the cross reference
 	if err := parser.LoadXref(); err != nil {
 		// try to repair a bad cross reference
-		fmt.Fprintln(os.Stderr, "Bad Xref")
+		fmt.Fprintf(os.Stderr, "Bad Xref: %s", err)
 		parser.RepairXref()
 	}
 
