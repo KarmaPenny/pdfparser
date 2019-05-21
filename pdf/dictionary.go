@@ -26,7 +26,7 @@ func (d Dictionary) GetInt(key string) (int, error) {
 	}
 	i, err := strconv.ParseInt(object.String(), 10, 32)
 	if err != nil {
-		return 0, WrapError(err, "Dictionary value at %s is not int32: %s", key, object.String())
+		return 0, WrapError(err, "Dictionary value at %s is not int32", key)
 	}
 	return int(i), nil
 }
@@ -38,7 +38,7 @@ func (d Dictionary) GetInt64(key string) (int64, error) {
 	}
 	i, err := strconv.ParseInt(object.String(), 10, 64)
 	if err != nil {
-		return 0, WrapError(err, "Dictionary value at %s is not int64: %s", key, object.String())
+		return 0, WrapError(err, "Dictionary value at %s is not int64", key)
 	}
 	return i, nil
 }
@@ -46,23 +46,23 @@ func (d Dictionary) GetInt64(key string) (int64, error) {
 func (d Dictionary) GetArray(key string) (Array, error) {
 	object, err := d.GetObject(key)
 	if err != nil {
-		return nil, err
+		return Array{}, err
 	}
 	if array, ok := object.(Array); ok {
 		return array, nil
 	}
-	return nil, WrapError(err, "Dictionary value at %s is not Array: %s", key, object.String())
+	return Array{}, NewError("Dictionary value at %s is not Array")
 }
 
 func (d Dictionary) GetDictionary(key string) (Dictionary, error) {
 	object, err := d.GetObject(key)
 	if err != nil {
-		return nil, err
+		return Dictionary{}, err
 	}
 	if dictionary, ok := object.(Dictionary); ok {
 		return dictionary, nil
 	}
-	return nil, WrapError(err, "Dictionary value at %s is not Dictionary: %s", key, object.String())
+	return Dictionary{}, NewError("Dictionary value at %s is not Dictionary", key)
 }
 
 // GetObjectFromDictionary gets an object from a dictionary, resolving references if needed
@@ -73,5 +73,5 @@ func (d Dictionary) GetObject(key string) (Object, error) {
 		}
 		return object, nil
 	}
-	return nil, NewError("Dictionary does not contain key: %s", key)
+	return NewNullObject(), NewError("Dictionary does not contain key: %s", key)
 }

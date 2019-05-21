@@ -12,7 +12,7 @@ import (
 var start_xref_scan_buffer_size int64 = 256
 var start_xref_regexp = regexp.MustCompile(`startxref\s*(\d+)\s*%%EOF`)
 
-type Reader struct {
+type Parser struct {
 	*os.File
 	tokenizer *Tokenizer
 	Xref map[int64]*XrefEntry
@@ -21,32 +21,33 @@ type Reader struct {
 }
 
 // Open opens the file at path, loads the xref table and returns a pdf reader
-func Open(path string) (*Reader, error) {
+func Open(path string) (*Parser, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, WrapError(err, "Failed to open %s", path)
+		return nil, err
 	}
-	pdf := &Reader{file, NewTokenizer(file), map[int64]*XrefEntry{}, map[int64]interface{}{}, nil}
+	return &Parser{file, NewTokenizer(file), map[int64]*XrefEntry{}, map[int64]interface{}{}, nil}, nil
+}
 
+func (pdf *Parser) LoadXref() error {
 	// get the offset to the first xref table
 	start_xref_offset, err := pdf.getStartXrefOffset()
 	if err != nil {
-		pdf.RepairXref()
-		return pdf, nil
+		return err
 	}
 
-	// load the cross reference table
+	// load the xref from start xref offset
 	err = pdf.loadXref(start_xref_offset)
 	if err != nil {
-		pdf.RepairXref()
-		return pdf, nil
+		return err
 	}
 
-	return pdf, nil
+	// validate xref
+	return pdf.ValidateXref()
 }
 
-// Seek seeks the io.Reader to offset and resets the tokenizer
-func (pdf *Reader) Seek(offset int64, whence int) (int64, error) {
+// Seek seeks the io.Parser to offset and resets the tokenizer
+func (pdf *Parser) Seek(offset int64, whence int) (int64, error) {
 	pdf.tokenizer.Reset(pdf)
 	new_offset, err := pdf.File.Seek(offset, whence)
 	if err != nil {
@@ -56,7 +57,7 @@ func (pdf *Reader) Seek(offset int64, whence int) (int64, error) {
 }
 
 // CurrentOffset returns the current byte offset of the tokenizer
-func (pdf *Reader) CurrentOffset() (int64, error) {
+func (pdf *Parser) CurrentOffset() (int64, error) {
 	offset, err := pdf.File.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return 0, WrapError(err, "Failed to get current file offset")
@@ -64,12 +65,12 @@ func (pdf *Reader) CurrentOffset() (int64, error) {
 	return offset - int64(pdf.tokenizer.Buffered()), nil
 }
 
-func (pdf *Reader) IsEncrypted() bool {
+func (pdf *Parser) IsEncrypted() bool {
 	return pdf.Encrypt != nil
 }
 
 // getStartXrefOffset returns the offset to the first xref table
-func (pdf *Reader) getStartXrefOffset() (int64, error) {
+func (pdf *Parser) getStartXrefOffset() (int64, error) {
 	// start reading from the end of the file
 	offset, err := pdf.Seek(0, io.SeekEnd)
 	if err != nil {
@@ -105,7 +106,7 @@ func (pdf *Reader) getStartXrefOffset() (int64, error) {
 }
 
 // loadXref loads an xref section starting at offset into pdf.Xref
-func (pdf *Reader) loadXref(offset int64) error {
+func (pdf *Parser) loadXref(offset int64) error {
 	// track loaded xref offsets to prevent infinite loop
 	if _, ok := pdf.xref_offsets[offset]; ok {
 		// xref already loaded
@@ -135,7 +136,7 @@ func (pdf *Reader) loadXref(offset int64) error {
 }
 
 // readXrefTable reads an xref table into pdf.Xref
-func (pdf *Reader) readXrefTable() error {
+func (pdf *Parser) readXrefTable() error {
 	// scan until end of xref table is reached
 	for {
 		// find next xref subsection start
@@ -211,7 +212,7 @@ func (pdf *Reader) readXrefTable() error {
 		return err
 	}
 
-	// set encrypt dictionary if there is one
+	// set encrypt dictionary if there isnt one already
 	if !pdf.IsEncrypted() {
 		pdf.Encrypt, _ = trailer.GetDictionary("/Encrypt");
 	}
@@ -225,7 +226,7 @@ func (pdf *Reader) readXrefTable() error {
 }
 
 // readXrefStream reads an xref stream object into pdf.Xref
-func (pdf *Reader) readXrefStream() error {
+func (pdf *Parser) readXrefStream() error {
 	// skip generation number and obj start marker
 	_, err := pdf.NextObject()
 	if err != nil {
@@ -321,7 +322,7 @@ func (pdf *Reader) readXrefStream() error {
 		}
 	}
 
-	// set encrypt dictionary if there is one
+	// set encrypt dictionary if there isnt one already
 	if !pdf.IsEncrypted() {
 		pdf.Encrypt, _ = trailer.GetDictionary("/Encrypt");
 	}
@@ -334,13 +335,55 @@ func (pdf *Reader) readXrefStream() error {
 	return nil
 }
 
+// ValidateXref checks to make sure that the loaded xref data actually points to objects
+func (pdf *Parser) ValidateXref() error {
+	count := 0
+	for n, entry := range pdf.Xref {
+		if entry.Type == XrefTypeIndirectObject {
+			// seek to start of object
+			if _, err := pdf.Seek(entry.Offset, io.SeekStart); err != nil {
+				return WrapError(err, "Unable to seek to start of object %d", n)
+			}
+
+			// get object number
+			if _, err := pdf.NextInt64(); err != nil {
+				return NewError("Invalid object number for object %d", n)
+			}
+
+			// get generation number
+			if _, err := pdf.NextInt64(); err != nil {
+				return NewError("Invalid object generation for object %d", n)
+			}
+
+			// skip obj start marker
+			if _, err := pdf.NextString(); err != nil {
+				return WrapError(err, "Failed to read obj start marker for object %d", n)
+			}
+
+			// update xref to skip obj header
+			new_offset, err := pdf.CurrentOffset()
+			if err != nil {
+				return WrapError(err, "Failed to update xref offset")
+			}
+			pdf.Xref[n].Offset = new_offset
+		}
+		count++
+	}
+
+	if count == 0 {
+		return NewError("Xref is empty")
+	}
+
+	return nil
+}
+
 // RepairXref attempt to rebuild the xref table by locating all obj start markers in the pdf file
-func (pdf *Reader) RepairXref() {
+func (pdf *Parser) RepairXref() {
 	// TODO: implement repair xref
 }
 
 // ReadObject reads an object by looking up the number in the xref table
-func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
+func (pdf *Parser) ReadObject(number int64) (*IndirectObject, error) {
 	// create a new indirect object
 	object := NewIndirectObject(number)
 
@@ -354,24 +397,6 @@ func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
 			_, err := pdf.Seek(xref_entry.Offset, io.SeekStart)
 			if err != nil {
 				return object, WrapError(err, "Unable to seek to start of object %d", number)
-			}
-
-			// get object number
-			_, err = pdf.NextInt64()
-			if err != nil {
-				return object, NewError("Invalid object number for object %d", number)
-			}
-
-			// get generation number
-			_, err = pdf.NextInt64()
-			if err != nil {
-				return object, NewError("Invalid object generation for object %d", number)
-			}
-
-			// skip obj start marker
-			_, err = pdf.NextString()
-			if err != nil {
-				return object, WrapError(err, "Failed to read obj start marker for object %d", number)
 			}
 
 			// get the value of the object
@@ -404,7 +429,7 @@ func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
 	return object, nil
 }
 
-func (pdf *Reader) ReadStream(d Dictionary) ([]byte, error) {
+func (pdf *Parser) ReadStream(d Dictionary) ([]byte, error) {
 	// read until new line
 	for {
 		b, err := pdf.tokenizer.ReadByte()
@@ -483,65 +508,37 @@ func (pdf *Reader) ReadStream(d Dictionary) ([]byte, error) {
 	// get stream_data_bytes
 	stream_data_bytes := stream_data.Bytes()
 
-	// assert len(stream_data_bytes) == Length from stream dictionary
-	//stream_length, err := d.GetInt64("/Length")
-	//if err != nil {
-	//	return nil, err
-	//}
-	//if stream_length != int64(len(stream_data_bytes)) {
-	//	return stream_data_bytes, NewError("Stream length mismatch")
-	//}
-
-	// get list of filters
-	filter, err := d.GetObject("/Filter")
-	if err != nil {
-		// no filters applied
-		return stream_data_bytes, nil
-	}
-
-	// get decode parms
-	decode_parms_object, err := d.GetObject("/DecodeParms")
-	if err != nil {
-		decode_parms_object = NewTokenString("null")
-	}
-
-	// if filter entry is list of filters then apply in order
-	filter_list, ok := filter.(Array)
-	if ok {
-		decode_parms_list, ok := decode_parms_object.(Array)
-		if !ok {
-			decode_parms_list = Array{}
-		}
-		for i, f := range filter_list {
-			decode_parms_list_object, err := decode_parms_list.GetObject(i)
-			if err != nil {
-				decode_parms_list_object = NewTokenString("null")
+	// if list of filters
+	if filter_list, err := d.GetArray("/Filter"); err == nil {
+		decode_parms_list, _ := d.GetArray("/DecodeParms")
+		for i, filter := range filter_list {
+			decode_parms, _ := decode_parms_list.GetDictionary(i)
+			stream_data_bytes, err = DecodeStream(filter.String(), stream_data_bytes, decode_parms)
+			if err == ErrorUnsupported {
+				// stop when unsupported feature is encountered
+				break
 			}
-			stream_data_bytes, err = DecodeStream(f.String(), stream_data_bytes, decode_parms_list_object)
 			if err != nil {
-				// dont display unsupported error
-				if err == ErrorUnsupported {
-					return stream_data_bytes, nil
-				}
 				return stream_data_bytes, err
 			}
 		}
 		return stream_data_bytes, nil
 	}
 
-	// if filter is a single filter then apply it
-	stream_data_bytes, err = DecodeStream(filter.String(), stream_data_bytes, decode_parms_object)
-	if err != nil {
-		// dont display unsupported error
-		if err == ErrorUnsupported {
-			return stream_data_bytes, nil
+	// if single filter
+	if filter, err := d.GetObject("/Filter"); err == nil {
+		decode_parms, _ := d.GetDictionary("/DecodeParms")
+		stream_data_bytes, err = DecodeStream(filter.String(), stream_data_bytes, decode_parms)
+		if err != nil && err != ErrorUnsupported {
+			return stream_data_bytes, err
 		}
-		return stream_data_bytes, err
 	}
+
+	// no filters applied
 	return stream_data_bytes, nil
 }
 
-func (pdf *Reader) NextInt64() (int64, error) {
+func (pdf *Parser) NextInt64() (int64, error) {
 	s, err := pdf.NextString()
 	if err != nil {
 		return 0, err
@@ -553,7 +550,7 @@ func (pdf *Reader) NextInt64() (int64, error) {
 	return value, nil
 }
 
-func (pdf *Reader) NextString() (string , error) {
+func (pdf *Parser) NextString() (string , error) {
 	object, err := pdf.NextObject()
 	if err != nil {
 		return "", err
@@ -564,7 +561,7 @@ func (pdf *Reader) NextString() (string , error) {
 	return "", NewError("Expected string")
 }
 
-func (pdf *Reader) NextDictionary() (Dictionary, error) {
+func (pdf *Parser) NextDictionary() (Dictionary, error) {
 	object, err := pdf.NextObject()
 	if err != nil {
 		return nil, err
@@ -575,7 +572,7 @@ func (pdf *Reader) NextDictionary() (Dictionary, error) {
 	return nil, NewError("Expected Dictionary")
 }
 
-func (pdf *Reader) NextObject() (fmt.Stringer, error) {
+func (pdf *Parser) NextObject() (fmt.Stringer, error) {
 	// get next token
 	token, err := pdf.tokenizer.NextToken()
 	if err != nil {

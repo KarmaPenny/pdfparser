@@ -2,10 +2,21 @@ package pdf
 
 import (
 	"fmt"
+	"strings"
 )
 
 type Object interface {
 	String() string
+}
+
+type NullObject struct {}
+
+func NewNullObject() *NullObject {
+	return &NullObject{}
+}
+
+func (obj *NullObject) String() string {
+	return "null"
 }
 
 type IndirectObject struct {
@@ -16,20 +27,18 @@ type IndirectObject struct {
 }
 
 func NewIndirectObject(number int64) *IndirectObject {
-	return &IndirectObject{number, 0, NewTokenString("null"), nil}
+	return &IndirectObject{number, 0, NewNullObject(), nil}
 }
 
-func (obj *IndirectObject) Print() {
-	value := obj.Value.String()
-	// dont print null objects
-	if value != "null" {
-		fmt.Printf("%d %d obj\n", obj.Number, obj.Generation)
-		fmt.Println(value)
-		if obj.Stream != nil {
-			fmt.Println("stream")
-			fmt.Println(string(obj.Stream))
-			fmt.Println("endstream")
-		}
-		fmt.Println("endobj")
+func (obj *IndirectObject) String() string {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("%d %d obj\n", obj.Number, obj.Generation))
+	b.WriteString(obj.Value.String())
+	if obj.Stream != nil {
+		b.WriteString("\nstream\n")
+		b.WriteString(string(obj.Stream))
+		b.WriteString("\nendstream")
 	}
+	b.WriteString("\nendobj\n")
+	return b.String()
 }

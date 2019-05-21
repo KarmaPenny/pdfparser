@@ -8,28 +8,36 @@ import (
 
 func main() {
 	// open the pdf
-	reader, err := pdf.Open(os.Args[1])
+	parser, err := pdf.Open(os.Args[1])
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
-	if reader.IsEncrypted() {
+	// load the cross reference
+	if err := parser.LoadXref(); err != nil {
+		// try to repair a bad cross reference
+		fmt.Fprintln(os.Stderr, "Bad Xref")
+		parser.RepairXref()
+	}
+
+	// check if pdf is encrypted
+	if parser.IsEncrypted() {
 		fmt.Fprintln(os.Stderr, "Encrypted")
 		os.Exit(1)
 	}
 
 	// print all objects in xref
-	for number := range reader.Xref {
+	for number := range parser.Xref {
 		// read object
-		object, err := reader.ReadObject(number)
+		object, err := parser.ReadObject(number)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
+			fmt.Fprintln(os.Stderr, err)
 			continue
 		}
 
 		// print object
-		object.Print()
+		fmt.Fprint(os.Stdout, object)
 	}
 }

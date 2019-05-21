@@ -6,12 +6,12 @@ import (
 )
 
 type Reference struct {
-	pdf *Reader
+	pdf *Parser
 	Number int64
 	Generation int64
 }
 
-func NewReference(pdf *Reader, number int64, generation int64) *Reference {
+func NewReference(pdf *Parser, number int64, generation int64) *Reference {
 	return &Reference{pdf, number, generation}
 }
 
@@ -39,14 +39,14 @@ func (reference *Reference) Resolve() (Object, error) {
 func (reference *Reference) resolve(resolved_references map[int64]interface{}) Object {
 	// prevent infinite loop
 	if _, ok := resolved_references[reference.Number]; ok {
-		return NewTokenString("null")
+		return NewNullObject()
 	}
 	resolved_references[reference.Number] = nil
 
 	// read the object from the pdf
 	object, err := reference.pdf.ReadObject(reference.Number)
 	if err != nil {
-		return NewTokenString("null")
+		return NewNullObject()
 	}
 
 	// recursively resolve references

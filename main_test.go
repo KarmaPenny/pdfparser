@@ -7,22 +7,37 @@ import (
 	"testing"
 )
 
-// GetPath returns the path to a pdf in the test pdfs dir
-func GetPath(pdf_name string) string {
+// LoadTestPdf returns a loaded parser for the provided pdf_name in the test directory
+func LoadTestPdf(pdf_name string) (*pdf.Parser, error) {
+	// open the pdf
 	_, test_path, _, _ := runtime.Caller(0)
 	test_dir := filepath.Dir(test_path)
-	return filepath.Join(test_dir, "test", pdf_name)
+	path := filepath.Join(test_dir, "test", pdf_name)
+	parser, err := pdf.Open(path)
+	if err != nil {
+		return nil, err
+	}
+
+	// load the cross reference
+	if err := parser.LoadXref(); err != nil {
+		// try to repair a bad cross reference
+		parser.RepairXref()
+	}
+
+	return parser, nil
 }
 
+// Make sure the default values for index are used if the index array is not present
 func TestXrefStreamMissingIndex(test *testing.T) {
-	reader, err := pdf.Open(GetPath("xref_stream_missing_index_test.pdf"))
+	// load the pdf to test
+	parser, err := LoadTestPdf("xref_stream_missing_index_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// read the object 2
-	object, err := reader.ReadObject(2)
+	object, err := parser.ReadObject(2)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
@@ -33,15 +48,17 @@ func TestXrefStreamMissingIndex(test *testing.T) {
 	}
 }
 
+// make sure streams are still read if the stream start marker is only followed by a carriage return
 func TestStreamCarriageReturn(test *testing.T) {
-	reader, err := pdf.Open(GetPath("stream_carriage_return_test.pdf"))
+	// load the pdf to test
+	parser, err := LoadTestPdf("stream_carriage_return_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// read the object 2
-	object, err := reader.ReadObject(2)
+	object, err := parser.ReadObject(2)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
@@ -53,14 +70,15 @@ func TestStreamCarriageReturn(test *testing.T) {
 }
 
 func TestStrings(test *testing.T) {
-	reader, err := pdf.Open(GetPath("strings_test.pdf"))
+	// load the pdf to test
+	parser, err := LoadTestPdf("strings_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// read the object 2
-	object, err := reader.ReadObject(2)
+	object, err := parser.ReadObject(2)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
@@ -72,14 +90,15 @@ func TestStrings(test *testing.T) {
 }
 
 func TestHexStrings(test *testing.T) {
-	reader, err := pdf.Open(GetPath("hex_strings_test.pdf"))
+	// load the pdf to test
+	parser, err := LoadTestPdf("hex_strings_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// read object 2
-	object, err := reader.ReadObject(2)
+	object, err := parser.ReadObject(2)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
@@ -91,14 +110,15 @@ func TestHexStrings(test *testing.T) {
 }
 
 func TestEmptyHexString(test *testing.T) {
-	reader, err := pdf.Open(GetPath("empty_hex_string_test.pdf"))
+	// load the pdf to test
+	parser, err := LoadTestPdf("empty_hex_string_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// read object 2
-	object, err := reader.ReadObject(2)
+	object, err := parser.ReadObject(2)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
@@ -110,14 +130,15 @@ func TestEmptyHexString(test *testing.T) {
 }
 
 func TestComments(test *testing.T) {
-	reader, err := pdf.Open(GetPath("comments_test.pdf"))
+	// load the pdf to test
+	parser, err := LoadTestPdf("comments_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// read object 2
-	object, err := reader.ReadObject(2)
+	object, err := parser.ReadObject(2)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
@@ -129,14 +150,15 @@ func TestComments(test *testing.T) {
 }
 
 func TestReferences(test *testing.T) {
-	reader, err := pdf.Open(GetPath("references_test.pdf"))
+	// load the pdf to test
+	parser, err := LoadTestPdf("references_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// read object 2
-	object, err := reader.ReadObject(2)
+	object, err := parser.ReadObject(2)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
@@ -148,14 +170,15 @@ func TestReferences(test *testing.T) {
 }
 
 func TestMultipleFilters(test *testing.T) {
-	reader, err := pdf.Open(GetPath("multiple_filters_test.pdf"))
+	// load the pdf to test
+	parser, err := LoadTestPdf("multiple_filters_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// read object 2
-	object, err := reader.ReadObject(2)
+	object, err := parser.ReadObject(2)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
@@ -167,32 +190,34 @@ func TestMultipleFilters(test *testing.T) {
 }
 
 func TestMultipleXrefTable(test *testing.T) {
-	reader, err := pdf.Open(GetPath("multiple_xref_table_test.pdf"))
+	// load the pdf to test
+	parser, err := LoadTestPdf("multiple_xref_table_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// assert xref length is 10
-	if len(reader.Xref) != 10 {
+	if len(parser.Xref) != 10 {
 		test.Fatalf("Incorrect number of objects in xref")
 	}
 }
 
 func TestMultipleXrefStream(test *testing.T) {
-	reader, err := pdf.Open(GetPath("multiple_xref_stream_test.pdf"))
+	// load the pdf to test
+	parser, err := LoadTestPdf("multiple_xref_stream_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// assert xref length is 17
-	if len(reader.Xref) != 17 {
+	if len(parser.Xref) != 17 {
 		test.Fatalf("Incorrect number of objects in xref")
 	}
 
 	// read the third object
-	object, err := reader.ReadObject(3)
+	object, err := parser.ReadObject(3)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
@@ -204,15 +229,16 @@ func TestMultipleXrefStream(test *testing.T) {
 }
 
 func TestASCIIHexDecodeFilter(test *testing.T) {
+	// load the pdf to test
 	// open pdf for this test
-	reader, err := pdf.Open(GetPath("ascii_hex_decode_test.pdf"))
+	parser, err := LoadTestPdf("ascii_hex_decode_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// read the first object
-	object, err := reader.ReadObject(1)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
@@ -224,15 +250,16 @@ func TestASCIIHexDecodeFilter(test *testing.T) {
 }
 
 func TestASCII85DecodeFilter(test *testing.T) {
+	// load the pdf to test
 	// open pdf for this test
-	reader, err := pdf.Open(GetPath("ascii_85_decode_test.pdf"))
+	parser, err := LoadTestPdf("ascii_85_decode_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// read the first object
-	object, err := reader.ReadObject(1)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
@@ -244,45 +271,48 @@ func TestASCII85DecodeFilter(test *testing.T) {
 }
 
 func TestFlateDecodeFilter(test *testing.T) {
+	// load the pdf to test
 	// open pdf for this test
-	reader, err := pdf.Open(GetPath("flate_decode_test.pdf"))
+	parser, err := LoadTestPdf("flate_decode_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// read the first object
-	_, err = reader.ReadObject(1)
+	_, err = parser.ReadObject(1)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
 }
 
 func TestLZWDecodeFilter(test *testing.T) {
+	// load the pdf to test
 	// open pdf for this test
-	reader, err := pdf.Open(GetPath("lzw_decode_test.pdf"))
+	parser, err := LoadTestPdf("lzw_decode_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// read the first object
-	_, err = reader.ReadObject(1)
+	_, err = parser.ReadObject(1)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}
 }
 
 func TestRunLengthDecodeFilter(test *testing.T) {
+	// load the pdf to test
 	// open pdf for this test
-	reader, err := pdf.Open(GetPath("run_length_decode_test.pdf"))
+	parser, err := LoadTestPdf("run_length_decode_test.pdf")
 	if err != nil {
-		test.Fatalf("Failed to open pdf: %s", err)
+		test.Fatal(err)
 	}
-	defer reader.Close()
+	defer parser.Close()
 
 	// read the first object
-	object, err := reader.ReadObject(1)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatalf("Failed to read object: %s", err)
 	}

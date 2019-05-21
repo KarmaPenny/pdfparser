@@ -5,7 +5,8 @@ import (
 	"runtime/debug"
 )
 
-// ErrorUnsupported used to stop execution without reporting an error
+var ErrorBadXref *Error = NewError("Bad Xref")
+var ErrorEncrypted *Error = NewError("Encrypted")
 var ErrorUnsupported *Error = NewError("Unsupported")
 
 // error that includes stack trace
