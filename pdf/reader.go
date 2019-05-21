@@ -553,17 +553,6 @@ func (pdf *Reader) NextInt64() (int64, error) {
 	return value, nil
 }
 
-func (pdf *Reader) NextName() (string , error) {
-	s, err := pdf.NextString()
-	if err != nil {
-		return "", err
-	}
-	if len(s) > 0 && s[:1] == "/" {
-		return s, nil
-	}
-	return "", NewError("Expected name")
-}
-
 func (pdf *Reader) NextString() (string , error) {
 	object, err := pdf.NextObject()
 	if err != nil {
@@ -655,7 +644,7 @@ func (pdf *Reader) NextObject() (fmt.Stringer, error) {
 		// parse all key value pairs
 		for {
 			// next object should be a key or dictionary end
-			key, err := pdf.NextName()
+			key, err := pdf.NextString()
 			if err != nil {
 				return nil, NewError("Invalid dictionary key")
 			}
