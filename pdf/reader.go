@@ -427,24 +427,69 @@ func (pdf *Reader) ReadStream(d Dictionary) ([]byte, error) {
 		}
 	}
 
-	// get length of stream from dictionary
-	stream_length, err := d.GetInt64("/Length")
-	if err != nil {
-		return nil, err
+	// create buffer for stream data
+	stream_data := bytes.NewBuffer([]byte{})
+
+	// read first 9 bytes to get started
+	buff := make([]byte, 9)
+	bytes_read, err := pdf.tokenizer.Read(buff)
+	if err != nil && bytes_read != len(buff) {
+		return stream_data.Bytes(), WrapError(err, "Failed to read stream data")
+	}
+	if bytes_read != len(buff) {
+		return stream_data.Bytes(), NewError("Failed to read stream data")
+	}
+	end_buff := bytes.NewBuffer(buff)
+
+	// read in stream data until endstream marker
+	for {
+		if end_buff.String() == "endstream" {
+			// truncate last new line from stream_data and stop reading stream data
+			l := stream_data.Len()
+			if l-1 >= 0 && stream_data.Bytes()[l-1] == '\n' {
+				if l-2 >= 0 && stream_data.Bytes()[l-2] == '\r' {
+					stream_data.Truncate(l-2)
+				} else {
+					stream_data.Truncate(l-1)
+				}
+			} else if l-1 >= 0 && stream_data.Bytes()[l-1] == '\r' {
+				stream_data.Truncate(l-1)
+			}
+			break
+		}
+
+		// add first byte of end_buff to stream_data
+		b, err := end_buff.ReadByte()
+		if err != nil {
+			return stream_data.Bytes(), WrapError(err, "Failed to read stream data")
+		}
+		stream_data.WriteByte(b)
+
+		// add next byte of stream to end_buff
+		b, err = pdf.tokenizer.ReadByte()
+		if err != nil {
+			return stream_data.Bytes(), WrapError(err, "Failed to read stream data")
+		}
+		end_buff.WriteByte(b)
 	}
 
-	// read stream data into buffer
-	stream_data := make([]byte, stream_length)
-	bytes_read, err := pdf.tokenizer.Read(stream_data)
-	if bytes_read == 0 && err != nil {
-		return nil, WrapError(err, "Failed to read stream data")
-	}
+	// get stream_data_bytes
+	stream_data_bytes := stream_data.Bytes()
+
+	// assert len(stream_data_bytes) == Length from stream dictionary
+	//stream_length, err := d.GetInt64("/Length")
+	//if err != nil {
+	//	return nil, err
+	//}
+	//if stream_length != int64(len(stream_data_bytes)) {
+	//	return stream_data_bytes, NewError("Stream length mismatch")
+	//}
 
 	// get list of filters
 	filter, err := d.GetObject("/Filter")
 	if err != nil {
 		// no filters applied
-		return stream_data, nil
+		return stream_data_bytes, nil
 	}
 
 	// get decode parms
@@ -465,28 +510,28 @@ func (pdf *Reader) ReadStream(d Dictionary) ([]byte, error) {
 			if err != nil {
 				decode_parms_list_object = NewTokenString("null")
 			}
-			stream_data, err = DecodeStream(f.String(), stream_data, decode_parms_list_object)
+			stream_data_bytes, err = DecodeStream(f.String(), stream_data_bytes, decode_parms_list_object)
 			if err != nil {
 				// dont display unsupported error
 				if err == ErrorUnsupported {
-					return stream_data, nil
+					return stream_data_bytes, nil
 				}
-				return stream_data, err
+				return stream_data_bytes, err
 			}
 		}
-		return stream_data, nil
+		return stream_data_bytes, nil
 	}
 
 	// if filter is a single filter then apply it
-	stream_data, err = DecodeStream(filter.String(), stream_data, decode_parms_object)
+	stream_data_bytes, err = DecodeStream(filter.String(), stream_data_bytes, decode_parms_object)
 	if err != nil {
 		// dont display unsupported error
 		if err == ErrorUnsupported {
-			return stream_data, nil
+			return stream_data_bytes, nil
 		}
-		return stream_data, err
+		return stream_data_bytes, err
 	}
-	return stream_data, nil
+	return stream_data_bytes, nil
 }
 
 func (pdf *Reader) NextInt64() (int64, error) {
