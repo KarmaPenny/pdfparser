@@ -370,7 +370,7 @@ func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
 			return object, WrapError(err, "Failed to read object %d", number)
 		}
 
-		// get the value of the reference
+		// get the value of the object
 		object.Value, err = pdf.NextObject()
 		if err != nil {
 			return object, WrapError(err, "Failed to read object %d", number)
