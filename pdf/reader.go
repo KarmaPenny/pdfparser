@@ -402,7 +402,7 @@ func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
 			}
 			return object, NewError("Missing stream dictionary for object %d", number)
 		} else if s != "endobj" {
-			return object, NewError("Malformed endobj marker for object %d", number)
+			return object, NewError("Malformed endobj marker for object %d: %s", number, s)
 		}
 	}
 	return object, nil
