@@ -399,9 +399,32 @@ func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
 
 func (pdf *Reader) ReadStream(d Dictionary) ([]byte, error) {
 	// read until new line
-	_, err := pdf.tokenizer.ReadBytes('\n')
-	if err != nil {
-		return nil, WrapError(err, "Start of stream not found")
+	for {
+		b, err := pdf.tokenizer.ReadByte()
+		if err != nil {
+			return nil, WrapError(err, "Start of stream not found")
+		}
+
+		// if new line then we are at the start of the stream data
+		if b == '\n' {
+			break
+		}
+
+		// if carriage return check if next byte is line feed
+		if b == '\r' {
+			b, err := pdf.tokenizer.ReadByte()
+			if err != nil {
+				return nil, WrapError(err, "Start of stream not found")
+			}
+			// if not new line then put it back cause it is part of the stream data
+			if b != '\n' {
+				err = pdf.tokenizer.UnreadByte()
+				if err != nil {
+					return nil, WrapError(err, "Start of stream not found")
+				}
+			}
+			break
+		}
 	}
 
 	// get length of stream from dictionary

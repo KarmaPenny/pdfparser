@@ -33,6 +33,25 @@ func TestXrefStreamMissingIndex(test *testing.T) {
 	}
 }
 
+func TestStreamCarriageReturn(test *testing.T) {
+	reader, err := pdf.Open(GetPath("stream_carriage_return_test.pdf"))
+	if err != nil {
+		test.Fatalf("Failed to open pdf: %s", err)
+	}
+	defer reader.Close()
+
+	// read the object 2
+	object, err := reader.ReadObject(2)
+	if err != nil {
+		test.Fatalf("Failed to read object: %s", err)
+	}
+
+	// assert object 2 value is correct
+	if string(object.Stream) != "Hello" {
+		test.Fatalf("Incorrect stream value: %s", string(object.Stream))
+	}
+}
+
 func TestStrings(test *testing.T) {
 	reader, err := pdf.Open(GetPath("strings_test.pdf"))
 	if err != nil {
