@@ -12,6 +12,11 @@ import (
 )
 
 func DecodeStream(filter string, data []byte, decode_parms_object Object) ([]byte, error) {
+	// do nothing if data is empty
+	if len(data) == 0 {
+		return data, nil
+	}
+
 	// convert decode_parms_object to dictionary
 	decode_parms, ok := decode_parms_object.(Dictionary)
 	if !ok {
