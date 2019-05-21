@@ -558,7 +558,7 @@ func (pdf *Reader) NextName() (string , error) {
 	if err != nil {
 		return "", err
 	}
-	if len(s) > 0 && s[0] == '/' {
+	if len(s) > 0 && s[:1] == "/" {
 		return s, nil
 	}
 	return "", NewError("Expected name")
