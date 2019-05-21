@@ -15,6 +15,11 @@ func main() {
 	}
 	defer reader.Close()
 
+	if reader.IsEncrypted() {
+		fmt.Fprintln(os.Stderr, "Encrypted")
+		os.Exit(1)
+	}
+
 	// print all objects in xref
 	for number := range reader.Xref {
 		// read object

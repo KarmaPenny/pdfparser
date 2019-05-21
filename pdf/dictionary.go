@@ -54,6 +54,17 @@ func (d Dictionary) GetArray(key string) (Array, error) {
 	return nil, WrapError(err, "Dictionary value at %s is not Array: %s", key, object.String())
 }
 
+func (d Dictionary) GetDictionary(key string) (Dictionary, error) {
+	object, err := d.GetObject(key)
+	if err != nil {
+		return nil, err
+	}
+	if dictionary, ok := object.(Dictionary); ok {
+		return dictionary, nil
+	}
+	return nil, WrapError(err, "Dictionary value at %s is not Dictionary: %s", key, object.String())
+}
+
 // GetObjectFromDictionary gets an object from a dictionary, resolving references if needed
 func (d Dictionary) GetObject(key string) (Object, error) {
 	if object, ok := d[key]; ok {

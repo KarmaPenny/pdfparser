@@ -17,6 +17,7 @@ type Reader struct {
 	tokenizer *Tokenizer
 	Xref map[int64]*XrefEntry
 	xref_offsets map[int64]interface{}
+	Encrypt Dictionary
 }
 
 // Open opens the file at path, loads the xref table and returns a pdf reader
@@ -25,7 +26,7 @@ func Open(path string) (*Reader, error) {
 	if err != nil {
 		return nil, WrapError(err, "Failed to open %s", path)
 	}
-	pdf := &Reader{file, NewTokenizer(file), map[int64]*XrefEntry{}, map[int64]interface{}{}}
+	pdf := &Reader{file, NewTokenizer(file), map[int64]*XrefEntry{}, map[int64]interface{}{}, nil}
 
 	// get the offset to the first xref table
 	start_xref_offset, err := pdf.getStartXrefOffset()
@@ -37,10 +38,6 @@ func Open(path string) (*Reader, error) {
 	// load the cross reference table
 	err = pdf.loadXref(start_xref_offset)
 	if err != nil {
-		if err == ErrorEncrypted {
-			pdf.Close()
-			return nil, err
-		}
 		pdf.RepairXref()
 		return pdf, nil
 	}
@@ -65,6 +62,10 @@ func (pdf *Reader) CurrentOffset() (int64, error) {
 		return 0, WrapError(err, "Failed to get current file offset")
 	}
 	return offset - int64(pdf.tokenizer.Buffered()), nil
+}
+
+func (pdf *Reader) IsEncrypted() bool {
+	return pdf.Encrypt != nil
 }
 
 // getStartXrefOffset returns the offset to the first xref table
@@ -210,15 +211,13 @@ func (pdf *Reader) readXrefTable() error {
 		return err
 	}
 
-	// check if pdf is encrypted
-	if _, err := trailer.GetObject("/Encrypt"); err == nil {
-		return ErrorEncrypted
-	}
-
 	// load previous xref section if it exists
 	if prev_xref_offset, err := trailer.GetInt64("/Prev"); err == nil {
 		return pdf.loadXref(prev_xref_offset)
 	}
+
+	// set encrypt dictionary if there is one
+	pdf.Encrypt, _ = trailer.GetDictionary("/Encrypt");
 
 	return nil
 }
@@ -239,11 +238,6 @@ func (pdf *Reader) readXrefStream() error {
 	trailer, err := pdf.NextDictionary()
 	if err != nil {
 		return err
-	}
-
-	// check if pdf is encrypted
-	if _, err := trailer.GetObject("/Encrypt"); err == nil {
-		return ErrorEncrypted
 	}
 
 	// get the index and width arrays
@@ -329,6 +323,9 @@ func (pdf *Reader) readXrefStream() error {
 	if prev_xref_offset, err := trailer.GetInt64("/Prev"); err == nil {
 		return pdf.loadXref(prev_xref_offset)
 	}
+
+	// set encrypt dictionary if there is one
+	pdf.Encrypt, _ = trailer.GetDictionary("/Encrypt");
 
 	return nil
 }
