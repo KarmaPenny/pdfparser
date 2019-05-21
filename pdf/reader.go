@@ -211,13 +211,15 @@ func (pdf *Reader) readXrefTable() error {
 		return err
 	}
 
+	// set encrypt dictionary if there is one
+	if !pdf.IsEncrypted() {
+		pdf.Encrypt, _ = trailer.GetDictionary("/Encrypt");
+	}
+
 	// load previous xref section if it exists
 	if prev_xref_offset, err := trailer.GetInt64("/Prev"); err == nil {
 		return pdf.loadXref(prev_xref_offset)
 	}
-
-	// set encrypt dictionary if there is one
-	pdf.Encrypt, _ = trailer.GetDictionary("/Encrypt");
 
 	return nil
 }
@@ -319,13 +321,15 @@ func (pdf *Reader) readXrefStream() error {
 		}
 	}
 
+	// set encrypt dictionary if there is one
+	if !pdf.IsEncrypted() {
+		pdf.Encrypt, _ = trailer.GetDictionary("/Encrypt");
+	}
+
 	// load previous xref section if it exists
 	if prev_xref_offset, err := trailer.GetInt64("/Prev"); err == nil {
 		return pdf.loadXref(prev_xref_offset)
 	}
-
-	// set encrypt dictionary if there is one
-	pdf.Encrypt, _ = trailer.GetDictionary("/Encrypt");
 
 	return nil
 }
