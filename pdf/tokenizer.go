@@ -198,6 +198,13 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 		}
 
 		for {
+			// if end of hex string
+			if b == '>' {
+				// add terminating marker to token and return
+				token.WriteByte('>')
+				return token, nil
+			}
+
 			// get next byte
 			b2, err := tokenizer.SkipWhitespace()
 			if err != nil {
@@ -229,13 +236,6 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 			b, err = tokenizer.SkipWhitespace()
 			if err != nil {
 				return nil, err
-			}
-
-			// if end of hex string
-			if b == '>' {
-				// add terminating marker to token and return
-				token.WriteByte('>')
-				return token, nil
 			}
 		}
 	}

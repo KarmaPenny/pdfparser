@@ -71,6 +71,25 @@ func TestHexStrings(test *testing.T) {
 	}
 }
 
+func TestEmptyHexString(test *testing.T) {
+	reader, err := pdf.Open(GetPath("empty_hex_string_test.pdf"))
+	if err != nil {
+		test.Fatalf("Failed to open pdf: %s", err)
+	}
+	defer reader.Close()
+
+	// read object 2
+	object, err := reader.ReadObject(2)
+	if err != nil {
+		test.Fatalf("Failed to read object: %s", err)
+	}
+
+	// assert object 2 is "<>"
+	if object.Value.String() != "<>" {
+		test.Fatalf("Incorrect string value: %s", object.Value.String())
+	}
+}
+
 func TestComments(test *testing.T) {
 	reader, err := pdf.Open(GetPath("comments_test.pdf"))
 	if err != nil {
