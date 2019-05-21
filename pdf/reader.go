@@ -353,30 +353,21 @@ func (pdf *Reader) ReadObject(number int64) (*IndirectObject, error) {
 		}
 
 		// get object number
-		n, err := pdf.NextInt64()
+		_, err = pdf.NextInt64()
 		if err != nil {
 			return object, WrapError(err, "Invalid object number for object %d", number)
 		}
-		if n != number {
-			return object, NewError("Object number does not match cross reference: %d != %d", n, number)
-		}
 
 		// get generation number
-		object.Generation, err = pdf.NextInt64()
+		_, err = pdf.NextInt64()
 		if err != nil {
 			return object, WrapError(err, "Invalid object generation for object %d", number)
 		}
-		if object.Generation != xref_entry.Generation {
-			return object, NewError("Object generation does not match cross reference: %d != %d", object.Generation, xref_entry.Generation)
-		}
 
 		// skip obj start marker
-		obj_start, err := pdf.NextString()
+		_, err = pdf.NextString()
 		if err != nil {
 			return object, WrapError(err, "Failed to read obj start marker for object %d", number)
-		}
-		if obj_start != "obj" {
-			return object, NewError("Malformed obj start marker for object %d", number)
 		}
 
 		// get the value of the object
