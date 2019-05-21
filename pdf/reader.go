@@ -75,33 +75,28 @@ func (pdf *Reader) getStartXrefOffset() (int64, error) {
 		return 0, err
 	}
 
-	// read until we find startxref marker or we reach the start of the file
-	for offset >= 0 {
-		// add half the buffer_size so that we do not miss markers that cross segments
-		offset -= start_xref_scan_buffer_size / 2
+	// read last several bytes and look for the start xref marker
+	offset -= start_xref_scan_buffer_size
+	if offset < 0 {
+		offset = 0
+	}
 
-		// prevent reading past start of file
-		if offset < 0 {
-			offset = 0
-		}
+	// read in buffer at offset
+	buffer := make([]byte, start_xref_scan_buffer_size)
+	_, err = pdf.ReadAt(buffer, offset)
+	if err != nil && err != io.EOF {
+		return 0, WrapError(err, "Scan for start xref marker failed")
+	}
 
-		// read in buffer at offset
-		buffer := make([]byte, start_xref_scan_buffer_size)
-		_, err = pdf.ReadAt(buffer, offset)
-		if err != nil && err != io.EOF {
-			return 0, WrapError(err, "Scan for start xref marker failed")
+	// check for start xref
+	matches := start_xref_regexp.FindAllSubmatch(buffer, -1)
+	if matches != nil {
+		// return the last most start xref offset
+		start_xref_offset, err := strconv.ParseInt(string(matches[len(matches)-1][1]), 10, 64)
+		if err != nil {
+			return 0, WrapError(err, "Start xref offset is not int64: %s", string(matches[len(matches)-1][1]))
 		}
-
-		// check for start xref
-		matches := start_xref_regexp.FindAllSubmatch(buffer, -1)
-		if matches != nil {
-			// return the last most start xref offset
-			start_xref_offset, err := strconv.ParseInt(string(matches[len(matches)-1][1]), 10, 64)
-			if err != nil {
-				return 0, WrapError(err, "Start xref offset is not int64: %s", string(matches[len(matches)-1][1]))
-			}
-			return start_xref_offset, nil
-		}
+		return start_xref_offset, nil
 	}
 
 	// start xref not found
