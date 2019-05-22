@@ -641,31 +641,19 @@ func (pdf *Parser) NextObject() (fmt.Stringer, error) {
 	// if the next 3 tokens form a reference
 	if token.IsNumber {
 		// get current offset so we can revert if need be
-		current_offset, err := pdf.CurrentOffset()
-		if err != nil {
-			return nil, err
-		}
+		current_offset, _ := pdf.CurrentOffset()
 
 		// check if next two tokens make a complete reference token
 		generation_token, err1 := pdf.tokenizer.NextToken()
 		reference_token, err2 := pdf.tokenizer.NextToken()
 		if err1 == nil && err2 == nil && generation_token.IsNumber && reference_token.String() == "R" {
-			number, err := strconv.ParseInt(token.String(), 10, 64)
-			if err != nil {
-				return nil, WrapError(err, "Failed to parse reference number: %s", token.String())
-			}
-			generation, err := strconv.ParseInt(generation_token.String(), 10, 64)
-			if err != nil {
-				return nil, WrapError(err, "Failed to parse reference generation: %s", generation_token.String())
-			}
+			number, _:= strconv.ParseInt(token.String(), 10, 64)
+			generation, _ := strconv.ParseInt(generation_token.String(), 10, 64)
 			return NewReference(pdf, number, generation), nil
 		}
 
 		// token is not a reference so revert tokenizer
-		_, err = pdf.Seek(current_offset, io.SeekStart)
-		if err != nil {
-			return nil, err
-		}
+		pdf.Seek(current_offset, io.SeekStart)
 		return token, nil
 	}
 
@@ -679,7 +667,7 @@ func (pdf *Parser) NextObject() (fmt.Stringer, error) {
 			// get next object
 			next_object, err := pdf.NextObject()
 			if err != nil {
-				return nil, err
+				return array, nil
 			}
 
 			// return if next object is array end
@@ -702,7 +690,7 @@ func (pdf *Parser) NextObject() (fmt.Stringer, error) {
 			// next object should be a key or dictionary end
 			key, err := pdf.NextString()
 			if err != nil {
-				return nil, NewError("Invalid dictionary key")
+				return dictionary, nil
 			}
 
 			// return if key is dictionary end
@@ -713,7 +701,7 @@ func (pdf *Parser) NextObject() (fmt.Stringer, error) {
 			// next object is the value
 			value, err := pdf.NextObject()
 			if err != nil {
-				return nil, err
+				value = NewNullObject()
 			}
 
 			// add key value pair to dictionary
