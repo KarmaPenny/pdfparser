@@ -527,10 +527,10 @@ func (pdf *Parser) ReadStream(d Dictionary) ([]byte, error) {
 	buff := make([]byte, 9)
 	bytes_read, err := pdf.tokenizer.Read(buff)
 	if err != nil && bytes_read != len(buff) {
-		return stream_data.Bytes(), WrapError(err, "Failed to read stream data")
+		return stream_data.Bytes(), err
 	}
 	if bytes_read != len(buff) {
-		return stream_data.Bytes(), NewError("Failed to read stream data")
+		return stream_data.Bytes(), io.EOF
 	}
 	end_buff := bytes.NewBuffer(buff)
 
@@ -554,14 +554,14 @@ func (pdf *Parser) ReadStream(d Dictionary) ([]byte, error) {
 		// add first byte of end_buff to stream_data
 		b, err := end_buff.ReadByte()
 		if err != nil {
-			return stream_data.Bytes(), WrapError(err, "Failed to read stream data")
+			return stream_data.Bytes(), err
 		}
 		stream_data.WriteByte(b)
 
 		// add next byte of stream to end_buff
 		b, err = pdf.tokenizer.ReadByte()
 		if err != nil {
-			return stream_data.Bytes(), WrapError(err, "Failed to read stream data")
+			return stream_data.Bytes(), err
 		}
 		end_buff.WriteByte(b)
 	}
