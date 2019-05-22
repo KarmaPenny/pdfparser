@@ -44,7 +44,7 @@ func Open(path string) (*Parser, error) {
 	err = pdf.RepairXref()
 	if err != nil {
 		pdf.Close()
-		return nil, err
+		return nil, WrapError(err, "Failed to repair xref")
 	}
 	return pdf, nil
 }
@@ -215,16 +215,14 @@ func (pdf *Parser) readXrefTable() error {
 		return err
 	}
 
-	// set encrypt dictionary if there isnt one already
-	if !pdf.IsEncrypted() {
-		if encrypt, err := trailer.GetDictionary("/Encrypt"); err == nil {
-			pdf.Encrypt = encrypt
-		}
-	}
-
 	// load previous xref section if it exists
 	if prev_xref_offset, err := trailer.GetInt64("/Prev"); err == nil {
 		return pdf.loadXref(prev_xref_offset)
+	}
+
+	// set encrypt dictionary
+	if encrypt, err := trailer.GetDictionary("/Encrypt"); err == nil {
+		pdf.Encrypt = encrypt
 	}
 
 	return nil
@@ -327,16 +325,14 @@ func (pdf *Parser) readXrefStream() error {
 		}
 	}
 
-	// set encrypt dictionary if there isnt one already
-	if !pdf.IsEncrypted() {
-		if encrypt, err := trailer.GetDictionary("/Encrypt"); err == nil {
-			pdf.Encrypt = encrypt
-		}
-	}
-
 	// load previous xref section if it exists
 	if prev_xref_offset, err := trailer.GetInt64("/Prev"); err == nil {
 		return pdf.loadXref(prev_xref_offset)
+	}
+
+	// set encrypt dictionary
+	if encrypt, err := trailer.GetDictionary("/Encrypt"); err == nil {
+		pdf.Encrypt = encrypt
 	}
 
 	return nil
@@ -344,7 +340,7 @@ func (pdf *Parser) readXrefStream() error {
 
 // IsXrefValid return true if the loaded xref data actually points to objects
 func (pdf *Parser) IsXrefValid() bool {
-	for n, entry := range pdf.Xref {
+	for _, entry := range pdf.Xref {
 		if entry.Type == XrefTypeIndirectObject {
 			// seek to start of object
 			if _, err := pdf.Seek(entry.Offset, io.SeekStart); err != nil {
@@ -365,13 +361,6 @@ func (pdf *Parser) IsXrefValid() bool {
 			if _, err := pdf.NextString(); err != nil {
 				return false
 			}
-
-			// update xref to skip obj header
-			new_offset, err := pdf.CurrentOffset()
-			if err != nil {
-				return false
-			}
-			pdf.Xref[n].Offset = new_offset
 		}
 	}
 	return true
@@ -396,35 +385,29 @@ func (pdf *Parser) RepairXref() error {
 		}
 
 		// seek to start of object
-		_, err := pdf.Seek(offset + int64(index[0]), io.SeekStart)
-		if err != nil {
+		if _, err := pdf.Seek(offset + int64(index[0]), io.SeekStart); err != nil {
 			return err
 		}
 
 		// get object number
-		n, err := pdf.NextInt64()
+		n, err := pdf.NextInt64();
 		if err != nil {
-			return NewError("Invalid object number for object %d", n)
+			return err
 		}
 
 		// get generation number
-		g, err := pdf.NextInt64()
+		g, err := pdf.NextInt64();
 		if err != nil {
-			return NewError("Invalid object generation for object %d", n)
+			return err
 		}
 
-		// skip obj start marker
-		_, err = pdf.NextString()
-		if err != nil {
-			return WrapError(err, "Failed to read obj start marker for object %d", n)
-		}
+		// add xref entry
+		pdf.Xref[n] = NewXrefEntry(offset + int64(index[0]), g, XrefTypeIndirectObject)
 
-		// update xref to skip obj header
-		offset, err = pdf.CurrentOffset()
-		if err != nil {
-			return WrapError(err, "Failed to update xref offset")
+		// seek to end of object start marker
+		if offset, err = pdf.Seek(offset + int64(index[1]), io.SeekStart); err != nil {
+			return err
 		}
-		pdf.Xref[n] = NewXrefEntry(offset, g, XrefTypeIndirectObject)
 	}
 	return nil
 }
@@ -444,6 +427,21 @@ func (pdf *Parser) ReadObject(number int64) (*IndirectObject, error) {
 			_, err := pdf.Seek(xref_entry.Offset, io.SeekStart)
 			if err != nil {
 				return object, WrapError(err, "Unable to seek to start of object %d", number)
+			}
+
+			// get object number
+			if _, err := pdf.NextInt64(); err != nil {
+				return object, NewError("Invalid object number")
+			}
+
+			// get generation number
+			if _, err := pdf.NextInt64(); err != nil {
+				return object, NewError("Invalid generation")
+			}
+
+			// skip obj start marker
+			if _, err := pdf.NextString(); err != nil {
+				return object, NewError("Invalid obj start marker")
 			}
 
 			// get the value of the object
