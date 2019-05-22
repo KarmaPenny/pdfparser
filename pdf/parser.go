@@ -2,7 +2,6 @@ package pdf
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"os"
 	"regexp"
@@ -242,14 +241,8 @@ func (pdf *Parser) readXrefTable() error {
 // readXrefStream reads an xref stream object into pdf.Xref
 func (pdf *Parser) readXrefStream() error {
 	// skip generation number and obj start marker
-	_, err := pdf.NextObject()
-	if err != nil {
-		return err
-	}
-	_, err = pdf.NextObject()
-	if err != nil {
-		return err
-	}
+	pdf.NextObject()
+	pdf.NextObject()
 
 	// get the stream dictionary which is also the trailer dictionary
 	trailer, err := pdf.NextDictionary()
@@ -294,10 +287,7 @@ func (pdf *Parser) readXrefStream() error {
 	}
 
 	// skip stream start marker
-	_, err = pdf.NextObject()
-	if err != nil {
-		return err
-	}
+	pdf.NextObject()
 
 	// read in the stream data
 	data, err := pdf.ReadStream(trailer)
@@ -440,48 +430,36 @@ func (pdf *Parser) ReadObject(number int64) (*IndirectObject, error) {
 		// if object is in use
 		if xref_entry.Type == XrefTypeIndirectObject {
 			// seek to start of object
-			_, err := pdf.Seek(xref_entry.Offset, io.SeekStart)
-			if err != nil {
-				return object, WrapError(err, "Unable to seek to start of object %d", number)
-			}
+			pdf.Seek(xref_entry.Offset, io.SeekStart)
 
-			// get object number
-			if _, err := pdf.NextInt64(); err != nil {
-				return object, NewError("Invalid object number")
-			}
-
-			// get generation number
-			if _, err := pdf.NextInt64(); err != nil {
-				return object, NewError("Invalid generation")
-			}
-
-			// skip obj start marker
-			if _, err := pdf.NextString(); err != nil {
-				return object, NewError("Invalid obj start marker")
-			}
+			// skip object number, generation and start marker
+			object.Value = pdf.NextObject()
+			object.Value = pdf.NextObject()
+			object.Value = pdf.NextObject()
 
 			// get the value of the object
-			object.Value, err = pdf.NextObject()
-			if err != nil {
-				return object, WrapError(err, "Failed to read object value for object %d", number)
-			}
+			object.Value = pdf.NextObject()
 
 			// get next string
 			s, err := pdf.NextString()
 			if err != nil {
-				return object, WrapError(err, "Failed to read object end marker for object %d", number)
+				return object, nil
 			}
 
 			// if this is a stream object
 			if s == "stream" {
-				if d, ok := object.Value.(Dictionary); ok {
-					object.Stream, err = pdf.ReadStream(d)
-					if err != nil {
-						return object, WrapError(err, "Failed to read object stream for object %d", number)
-					}
-					return object, nil
+				// get stream dictionary
+				d, ok := object.Value.(Dictionary)
+				if !ok {
+					d = Dictionary{}
 				}
-				return object, NewError("Missing stream dictionary for object %d", number)
+
+				// read the stream
+				object.Stream, err = pdf.ReadStream(d)
+				if err != nil {
+					return object, WrapError(err, "Failed to read object stream for object %d", number)
+				}
+				return object, nil
 			}
 		}
 	}
@@ -610,10 +588,7 @@ func (pdf *Parser) NextInt64() (int64, error) {
 }
 
 func (pdf *Parser) NextString() (string , error) {
-	object, err := pdf.NextObject()
-	if err != nil {
-		return "", err
-	}
+	object := pdf.NextObject()
 	if s, ok := object.(*Token); ok {
 		return s.String(), nil
 	}
@@ -621,21 +596,18 @@ func (pdf *Parser) NextString() (string , error) {
 }
 
 func (pdf *Parser) NextDictionary() (Dictionary, error) {
-	object, err := pdf.NextObject()
-	if err != nil {
-		return nil, err
-	}
+	object := pdf.NextObject()
 	if d, ok := object.(Dictionary); ok {
 		return d, nil
 	}
 	return nil, NewError("Expected Dictionary")
 }
 
-func (pdf *Parser) NextObject() (fmt.Stringer, error) {
+func (pdf *Parser) NextObject() Object {
 	// get next token
 	token, err := pdf.tokenizer.NextToken()
 	if err != nil {
-		return nil, err
+		return NewNullObject()
 	}
 
 	// if the next 3 tokens form a reference
@@ -649,12 +621,12 @@ func (pdf *Parser) NextObject() (fmt.Stringer, error) {
 		if err1 == nil && err2 == nil && generation_token.IsNumber && reference_token.String() == "R" {
 			number, _:= strconv.ParseInt(token.String(), 10, 64)
 			generation, _ := strconv.ParseInt(generation_token.String(), 10, 64)
-			return NewReference(pdf, number, generation), nil
+			return NewReference(pdf, number, generation)
 		}
 
 		// token is not a reference so revert tokenizer
 		pdf.Seek(current_offset, io.SeekStart)
-		return token, nil
+		return token
 	}
 
 	// if token is array start
@@ -665,14 +637,11 @@ func (pdf *Parser) NextObject() (fmt.Stringer, error) {
 		// parse all elements
 		for {
 			// get next object
-			next_object, err := pdf.NextObject()
-			if err != nil {
-				return array, nil
-			}
+			next_object := pdf.NextObject()
 
 			// return if next object is array end
 			if t, ok := next_object.(*Token); ok && t.String() == "]" {
-				return array, nil
+				return array
 			}
 
 			// add next object to array
@@ -690,25 +659,19 @@ func (pdf *Parser) NextObject() (fmt.Stringer, error) {
 			// next object should be a key or dictionary end
 			key, err := pdf.NextString()
 			if err != nil {
-				return dictionary, nil
+				return dictionary
 			}
 
 			// return if key is dictionary end
 			if key == ">>" {
-				return dictionary, nil
-			}
-
-			// next object is the value
-			value, err := pdf.NextObject()
-			if err != nil {
-				value = NewNullObject()
+				return dictionary
 			}
 
 			// add key value pair to dictionary
-			dictionary[key] = value
+			dictionary[key] = pdf.NextObject()
 		}
 	}
 
 	// return token
-	return token, nil
+	return token
 }
