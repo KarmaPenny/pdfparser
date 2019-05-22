@@ -10,8 +10,8 @@ import (
 // print help info
 func usage() {
 	fmt.Fprintln(os.Stderr, "pdfparser - decodes a pdf file")
-	fmt.Fprintln(os.Stderr, "https://github.com/KarmaPenny/pdfparser\n")
-	fmt.Fprintln(os.Stderr, "usage: pdfparser [options] file\n")
+	fmt.Fprintf(os.Stderr, "https://github.com/KarmaPenny/pdfparser\n\n")
+	fmt.Fprintf(os.Stderr, "usage: pdfparser [options] file\n\n")
 	fmt.Fprintln(os.Stderr, "options:")
 	flag.PrintDefaults()
 }
