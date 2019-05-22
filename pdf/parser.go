@@ -18,7 +18,7 @@ type Parser struct {
 	tokenizer *Tokenizer
 	Xref map[int64]*XrefEntry
 	xref_offsets map[int64]interface{}
-	Encrypt Dictionary
+	trailer Dictionary
 }
 
 // Open opens the file at path, loads the xref table and returns a pdf reader
@@ -27,25 +27,29 @@ func Open(path string) (*Parser, error) {
 	if err != nil {
 		return nil, err
 	}
-	pdf := &Parser{file, NewTokenizer(file), map[int64]*XrefEntry{}, map[int64]interface{}{}, nil}
+	pdf := &Parser{file, NewTokenizer(file), map[int64]*XrefEntry{}, map[int64]interface{}{}, Dictionary{}}
 
 	// find the start xref offset and load the xref
-	if start_xref_offset, err := pdf.getStartXrefOffset(); err == nil {
-		// load the xref from start xref offset
-		if err = pdf.loadXref(start_xref_offset); err == nil {
-			// validate xref
-			if pdf.IsXrefValid() {
-				return pdf, nil
-			}
-		}
+	start_xref_offset, err := pdf.getStartXrefOffset()
+	if err != nil {
+		pdf.RepairXref()
+		return pdf, nil
 	}
 
-	// attempt to repair the xref
-	err = pdf.RepairXref()
+	// load the xref from start xref offset
+	err = pdf.loadXref(start_xref_offset)
 	if err != nil {
-		pdf.Close()
-		return nil, WrapError(err, "Failed to repair xref")
+		pdf.RepairXref()
+		return pdf, nil
 	}
+
+	// validate xref
+	if pdf.IsXrefValid() {
+		return pdf, nil
+	}
+
+	// xref not valid so attempt to repair
+	pdf.RepairXref()
 	return pdf, nil
 }
 
@@ -69,7 +73,8 @@ func (pdf *Parser) CurrentOffset() (int64, error) {
 }
 
 func (pdf *Parser) IsEncrypted() bool {
-	return pdf.Encrypt != nil
+	_, ok := pdf.trailer["/Encrypt"]
+	return ok
 }
 
 // getStartXrefOffset returns the offset to the first xref table
@@ -209,20 +214,22 @@ func (pdf *Parser) readXrefTable() error {
 		}
 	}
 
-	// find start of trailer dictionary
+	// read in trailer dictionary
 	trailer, err := pdf.NextDictionary()
 	if err != nil {
 		return err
 	}
 
+	// merge trailer
+	for key, value := range trailer {
+		if _, ok := pdf.trailer[key]; !ok {
+			pdf.trailer[key] = value
+		}
+	}
+
 	// load previous xref section if it exists
 	if prev_xref_offset, err := trailer.GetInt64("/Prev"); err == nil {
 		return pdf.loadXref(prev_xref_offset)
-	}
-
-	// set encrypt dictionary
-	if encrypt, err := trailer.GetDictionary("/Encrypt"); err == nil {
-		pdf.Encrypt = encrypt
 	}
 
 	return nil
@@ -244,6 +251,13 @@ func (pdf *Parser) readXrefStream() error {
 	trailer, err := pdf.NextDictionary()
 	if err != nil {
 		return err
+	}
+
+	// merge trailer
+	for key, value := range trailer {
+		if _, ok := pdf.trailer[key]; !ok {
+			pdf.trailer[key] = value
+		}
 	}
 
 	// get the index and width arrays
@@ -328,11 +342,6 @@ func (pdf *Parser) readXrefStream() error {
 	// load previous xref section if it exists
 	if prev_xref_offset, err := trailer.GetInt64("/Prev"); err == nil {
 		return pdf.loadXref(prev_xref_offset)
-	}
-
-	// set encrypt dictionary
-	if encrypt, err := trailer.GetDictionary("/Encrypt"); err == nil {
-		pdf.Encrypt = encrypt
 	}
 
 	return nil
