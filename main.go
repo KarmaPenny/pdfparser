@@ -9,7 +9,7 @@ import (
 
 // print help info
 func usage() {
-	fmt.Fprintln(os.Stderr, "pdfparser - decodes a pdf file")
+	fmt.Fprintln(os.Stderr, "PDF Parser - decodes a pdf file")
 	fmt.Fprintf(os.Stderr, "https://github.com/KarmaPenny/pdfparser\n\n")
 	fmt.Fprintf(os.Stderr, "usage: pdfparser [options] file\n\n")
 	fmt.Fprintln(os.Stderr, "options:")
@@ -18,7 +18,7 @@ func usage() {
 
 func main() {
 	// cmd args
-	pdf.Verbose = flag.Bool("v", false, "display verbose log and error messages")
+	pdf.Verbose = flag.Bool("v", false, "display verbose messages")
 	flag.Usage = usage
 	flag.Parse()
 	if flag.NArg() == 0 {

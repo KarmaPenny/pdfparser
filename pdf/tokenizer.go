@@ -245,7 +245,7 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 		// get the next byte
 		b, err = tokenizer.ReadByte()
 		if err != nil {
-			return nil, WrapError(err, "Failed to tokenizer dictionary end marker")
+			return nil, WrapError(err, "Failed to tokenize dictionary end marker")
 		}
 		token.WriteByte(b)
 
@@ -289,7 +289,7 @@ func (tokenizer *Tokenizer) SkipWhitespace() (byte, error) {
 		// get next byte
 		b, err := tokenizer.ReadByte()
 		if err != nil {
-			return 0, WrapError(err, "Failed to consume whitespace")
+			return 0, err
 		}
 
 		// advance if next byte is whitespace
@@ -301,7 +301,7 @@ func (tokenizer *Tokenizer) SkipWhitespace() (byte, error) {
 		if b == '%' {
 			_, err = tokenizer.ReadBytes('\n')
 			if err != nil {
-				return 0, WrapError(err, "Failed to consume comment")
+				return 0, err
 			}
 			continue
 		}

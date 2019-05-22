@@ -32,6 +32,7 @@ func Open(path string) (*Parser, error) {
 	// find the start xref offset and load the xref
 	start_xref_offset, err := pdf.getStartXrefOffset()
 	if err != nil {
+		Debug("startxref not found")
 		pdf.RepairXref()
 		return pdf, nil
 	}
@@ -39,17 +40,20 @@ func Open(path string) (*Parser, error) {
 	// load the xref from start xref offset
 	err = pdf.loadXref(start_xref_offset)
 	if err != nil {
+		Debug("failed to load xref: %s", err)
 		pdf.RepairXref()
 		return pdf, nil
 	}
 
 	// validate xref
-	if pdf.IsXrefValid() {
+	err = pdf.IsXrefValid()
+	if err != nil {
+		Debug("invalid xref: %s", err)
+		pdf.RepairXref()
 		return pdf, nil
 	}
 
-	// xref not valid so attempt to repair
-	pdf.RepairXref()
+	Debug("loaded %d xref entries", len(pdf.Xref))
 	return pdf, nil
 }
 
@@ -348,35 +352,37 @@ func (pdf *Parser) readXrefStream() error {
 }
 
 // IsXrefValid return true if the loaded xref data actually points to objects
-func (pdf *Parser) IsXrefValid() bool {
-	for _, entry := range pdf.Xref {
+func (pdf *Parser) IsXrefValid() error {
+	for n, entry := range pdf.Xref {
 		if entry.Type == XrefTypeIndirectObject {
 			// seek to start of object
 			if _, err := pdf.Seek(entry.Offset, io.SeekStart); err != nil {
-				return false
+				return err
 			}
 
 			// get object number
 			if _, err := pdf.NextInt64(); err != nil {
-				return false
+				return WrapError(err, "Bad object number for object %d", n)
 			}
 
 			// get generation number
 			if _, err := pdf.NextInt64(); err != nil {
-				return false
+				return WrapError(err, "Bad generation number for object %d", n)
 			}
 
 			// skip obj start marker
 			if _, err := pdf.NextString(); err != nil {
-				return false
+				return WrapError(err, "Bad obj marker for object %d", n)
 			}
 		}
 	}
-	return true
+	return nil
 }
 
 // RepairXref attempts to rebuild the xref table by locating all obj start markers in the pdf file
 func (pdf *Parser) RepairXref() error {
+	Debug("repairing xref")
+
 	// clear the xref
 	pdf.Xref = map[int64]*XrefEntry{}
 
@@ -418,6 +424,7 @@ func (pdf *Parser) RepairXref() error {
 			return err
 		}
 	}
+	Debug("repaired")
 	return nil
 }
 

@@ -5,11 +5,6 @@ import (
 	"runtime/debug"
 )
 
-// print stack traces when true
-var Verbose *bool
-
-var ErrorBadXref *Error = NewError("Bad Xref")
-var ErrorEncrypted *Error = NewError("Encrypted")
 var ErrorUnsupported *Error = NewError("Unsupported")
 
 // error that includes stack trace
