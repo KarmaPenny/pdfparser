@@ -5,6 +5,9 @@ import (
 	"runtime/debug"
 )
 
+// print stack traces when true
+var Verbose *bool
+
 var ErrorBadXref *Error = NewError("Bad Xref")
 var ErrorEncrypted *Error = NewError("Encrypted")
 var ErrorUnsupported *Error = NewError("Unsupported")
@@ -45,5 +48,8 @@ func WrapError(err error, format string, a ...interface{}) *Error {
 
 // implement error interface
 func (err *Error) Error() string {
-	return fmt.Sprintf("%s\n%s", err.message, string(err.trace))
+	if *Verbose {
+		return fmt.Sprintf("%s\n%s", err.message, string(err.trace))
+	}
+	return err.message
 }
