@@ -40,7 +40,8 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 			// read next byte
 			b, err = tokenizer.ReadByte()
 			if err != nil {
-				return nil, WrapError(err, "Failed to tokenize string")
+				token.WriteByte(')')
+				return token, nil
 			}
 
 			// if this is the start of an escape sequence
@@ -48,7 +49,10 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 				// read next byte
 				b, err = tokenizer.ReadByte()
 				if err != nil {
-					return nil, WrapError(err, "Failed to tokenize string")
+					token.WriteByte(b)
+					token.WriteByte(b)
+					token.WriteByte(')')
+					return token, nil
 				}
 
 				// ignore escaped line breaks \n or \r or \r\n
@@ -59,14 +63,12 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 					// read next byte
 					b, err = tokenizer.ReadByte()
 					if err != nil {
-						return nil, WrapError(err, "Failed to tokenize string")
+						token.WriteByte(')')
+						return token, nil
 					}
 					// if byte is not a new line then unread it
 					if b != '\n' {
-						err = tokenizer.UnreadByte()
-						if err != nil {
-							return nil, WrapError(err, "Failed to tokenize string")
-						}
+						tokenizer.UnreadByte()
 					}
 					continue
 				}
@@ -94,16 +96,13 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 						// read next byte
 						b, err = tokenizer.ReadByte()
 						if err != nil {
-							return nil, WrapError(err, "Failed to tokenize string")
+							break
 						}
 
 						// if next byte is not part of the octal code
 						if b < '0' || b > '7' {
 							// unread the byte and stop collecting code
-							err = tokenizer.UnreadByte()
-							if err != nil {
-								return nil, WrapError(err, "Failed to tokenize string")
-							}
+							tokenizer.UnreadByte()
 							break
 						}
 
@@ -114,7 +113,8 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 					// convert code into byte
 					val, err := strconv.ParseUint(string(code.Bytes()), 8, 8)
 					if err != nil {
-						return nil, WrapError(err, "Failed to tokenize string")
+						token.Write(code.Bytes())
+						continue
 					}
 					b = byte(val)
 				}
@@ -146,34 +146,30 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 			// read in the next byte
 			b, err = tokenizer.ReadByte()
 			if err != nil {
-				return nil, WrapError(err, "Failed to tokenize name")
+				return token, nil
 			}
 
 			// if the next byte is whitespace or delimiter then unread it and return the token
 			if bytes.IndexByte(delimiters, b) >= 0 || bytes.IndexByte(whitespace, b) >= 0 {
-				err = tokenizer.UnreadByte()
-				if err != nil {
-					return nil, WrapError(err, "Failed to tokenize name")
-				}
+				tokenizer.UnreadByte()
 				return token, nil
 			}
 
 			// if next byte is the start of a hex character code
 			if b == '#' {
 				// read the next 2 bytes
-				code, err := tokenizer.Peek(2)
-				if err != nil {
-					return nil, WrapError(err, "Failed to tokenize name")
-				}
-				_, err = tokenizer.Discard(2)
-				if err != nil {
-					return nil, WrapError(err, "Failed to tokenize name")
+				code := make([]byte, 2)
+				bytes_read, _ := tokenizer.Read(code)
+				for ; bytes_read < len(code); bytes_read++ {
+						code[bytes_read] = byte('0')
 				}
 
 				// convert the hex code to a byte
 				val, err := strconv.ParseUint(string(code), 16, 8)
 				if err != nil {
-					return nil, WrapError(err, "Failed to tokenize name")
+					token.WriteByte(b)
+					token.Write(code)
+					continue
 				}
 				b = byte(val)
 			}
@@ -188,7 +184,8 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 		// get next byte
 		b, err = tokenizer.SkipWhitespace()
 		if err != nil {
-			return nil, err
+			token.WriteByte('>')
+			return token, nil
 		}
 
 		// if this is the dictionary start marker then return token
@@ -208,7 +205,8 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 			// get next byte
 			b2, err := tokenizer.SkipWhitespace()
 			if err != nil {
-				return nil, err
+				token.WriteByte('>')
+				return token, nil
 			}
 
 			// early end of hex string last character is assumed to be 0
@@ -216,11 +214,12 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 				// add decoded byte to token
 				v, err := strconv.ParseUint(string([]byte{b, '0'}), 16, 8)
 				if err != nil {
-					return nil, WrapError(err, "Invalid hex string character: %x", []byte{b, '0'})
+					token.WriteByte(b)
+					token.WriteByte('0')
+					token.WriteByte('>')
+					return token, nil
 				}
 				token.WriteByte(byte(v))
-
-				// add terminating marker to token and return
 				token.WriteByte('>')
 				return token, nil
 			}
@@ -228,31 +227,28 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 			// add decoded byte to token
 			v, err := strconv.ParseUint(string([]byte{b, b2}), 16, 8)
 			if err != nil {
-				return nil, WrapError(err, "Invalid hex string character: %x", []byte{b, b2})
+				token.WriteByte(b)
+				token.WriteByte(b2)
+			} else {
+				token.WriteByte(byte(v))
 			}
-			token.WriteByte(byte(v))
 
 			// get next byte
 			b, err = tokenizer.SkipWhitespace()
 			if err != nil {
-				return nil, err
+				token.WriteByte('>')
+				return token, nil
 			}
 		}
 	}
 
 	// if end of dictionary
 	if b == '>' {
-		// get the next byte
 		b, err = tokenizer.ReadByte()
-		if err != nil {
-			return nil, WrapError(err, "Failed to tokenize dictionary end marker")
+		if err == nil  && b != '>' {
+			tokenizer.UnreadByte()
 		}
-		token.WriteByte(b)
-
-		// confirm token is a dictionary end
-		if b != '>' {
-			return nil, NewError("Malformed dictionary end marker")
-		}
+		token.WriteByte('>')
 		return token, nil
 	}
 
@@ -264,15 +260,12 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 		// get next byte
 		b, err = tokenizer.ReadByte()
 		if err != nil {
-			return nil, WrapError(err, "Failed to tokenize token")
+			return token, nil
 		}
 
 		// if byte is whitespace or delimiter then unread byte and return token
 		if bytes.IndexByte(whitespace, b) >= 0 || bytes.IndexByte(delimiters, b) >= 0 {
-			err = tokenizer.UnreadByte()
-			if err != nil {
-				return nil, WrapError(err, "Failed to tokenize token")
-			}
+			tokenizer.UnreadByte()
 			return token, nil
 		}
 
