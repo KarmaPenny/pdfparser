@@ -16,8 +16,8 @@ func usage() {
 	flag.PrintDefaults()
 }
 
-func main() {
-	// cmd args
+// parse cmd args
+func parse_args() {
 	pdf.Verbose = flag.Bool("v", false, "display verbose messages")
 	flag.Usage = usage
 	flag.Parse()
@@ -25,6 +25,11 @@ func main() {
 		usage()
 		os.Exit(1)
 	}
+}
+
+func main() {
+	// parse cmd args
+	parse_args()
 
 	// open the pdf
 	parser, err := pdf.Open(flag.Arg(0))
@@ -41,15 +46,17 @@ func main() {
 	}
 
 	// print all objects in xref
-	for number := range parser.Xref {
-		// read object
-		object, err := parser.ReadObject(number)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+	for n := range parser.Xref {
+		// print object n if value is not null
+		object := parser.ReadObject(n)
+		value := object.Value.String()
+		if value == "null" {
 			continue
 		}
-
-		// print object
-		object.Fprint(os.Stdout)
+		fmt.Printf("%d %d obj\n%s\n", object.Number, object.Generation, value)
+		if object.Stream != nil {
+			fmt.Printf("stream\n%s\nendstream\n", string(object.Stream))
+		}
+		fmt.Println("endobj")
 	}
 }

@@ -25,10 +25,7 @@ func TestComments(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(1)
-	if err != nil {
-		test.Fatal(err)
-	}
+	object := parser.ReadObject(1)
 
 	// assert value is correct
 	if object.Value.String() != "(%this is not a comment)" {
@@ -45,10 +42,7 @@ func TestEmptyArray(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(1)
-	if err != nil {
-		test.Fatal(err)
-	}
+	object := parser.ReadObject(1)
 
 	// assert value is correct
 	if object.Value.String() != "[]" {
@@ -65,10 +59,7 @@ func TestEmptyDictionary(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(1)
-	if err != nil {
-		test.Fatal(err)
-	}
+	object := parser.ReadObject(1)
 
 	// assert value is correct
 	if object.Value.String() != "<<>>" {
@@ -85,10 +76,7 @@ func TestFilterASCII85Decode(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(1)
-	if err != nil {
-		test.Fatal(err)
-	}
+	object := parser.ReadObject(1)
 
 	// assert value is correct
 	if string(object.Stream) != "\x00\x00\x00\x00%!FontType" {
@@ -105,10 +93,7 @@ func TestFilterASCIIHexDecode(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(1)
-	if err != nil {
-		test.Fatal(err)
-	}
+	object := parser.ReadObject(1)
 
 	// assert value is correct
 	if string(object.Stream) != "Hellop" {
@@ -125,10 +110,7 @@ func TestFilterFlateDecode(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(1)
-	if err != nil {
-		test.Fatal(err)
-	}
+	object := parser.ReadObject(1)
 
 	// assert value is correct
 	if string(object.Stream) != "hello world\nhello world\nhello world\nhello world\nhello world\n" {
@@ -145,7 +127,7 @@ func TestFilterLZWDecode(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(1)
+	object := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -165,7 +147,7 @@ func TestFilterLZWTiffDecode(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(1)
+	object := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -185,7 +167,7 @@ func TestFilterMultiple(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(1)
+	object := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -205,7 +187,7 @@ func TestFilterRunLengthDecode(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(1)
+	object := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -225,7 +207,7 @@ func TestNames(test *testing.T) {
 	defer parser.Close()
 
 	// read object
-	object, err := parser.ReadObject(1)
+	object := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -245,7 +227,7 @@ func TestReference(test *testing.T) {
 	defer parser.Close()
 
 	// read object
-	object, err := parser.ReadObject(1)
+	object := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -285,7 +267,7 @@ func TestReferenceLoop(test *testing.T) {
 		defer parser.Close()
 
 		// read object
-		object, err := parser.ReadObject(1)
+		object := parser.ReadObject(1)
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -325,7 +307,7 @@ func TestReferenceNull(test *testing.T) {
 	defer parser.Close()
 
 	// read object
-	object, err := parser.ReadObject(1)
+	object := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -357,7 +339,7 @@ func TestStreamCarriageReturn(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(1)
+	object := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -377,7 +359,7 @@ func TestStrings(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(1)
+	object := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -420,7 +402,7 @@ func TestUnclosedArray(test *testing.T) {
 		defer parser.Close()
 
 		// read the object
-		object, err := parser.ReadObject(1)
+		object := parser.ReadObject(1)
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -456,7 +438,7 @@ func TestUnclosedComment(test *testing.T) {
 		defer parser.Close()
 
 		// read the object
-		object, err := parser.ReadObject(1)
+		object := parser.ReadObject(1)
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -492,7 +474,7 @@ func TestUnclosedDictionary(test *testing.T) {
 		defer parser.Close()
 
 		// read the object
-		object, err := parser.ReadObject(1)
+		object := parser.ReadObject(1)
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -527,7 +509,7 @@ func TestUnclosedDictionaryKey(test *testing.T) {
 		defer parser.Close()
 
 		// read the object
-		object, err := parser.ReadObject(1)
+		object := parser.ReadObject(1)
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -563,7 +545,7 @@ func TestUnclosedHexString(test *testing.T) {
 		defer parser.Close()
 
 		// read the object
-		object, err := parser.ReadObject(1)
+		object := parser.ReadObject(1)
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -599,7 +581,7 @@ func TestUnclosedName(test *testing.T) {
 		defer parser.Close()
 
 		// read the object
-		object, err := parser.ReadObject(1)
+		object := parser.ReadObject(1)
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -635,7 +617,7 @@ func TestUnclosedNameEscape1(test *testing.T) {
 		defer parser.Close()
 
 		// read the object
-		object, err := parser.ReadObject(1)
+		object := parser.ReadObject(1)
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -671,7 +653,7 @@ func TestUnclosedNameEscape2(test *testing.T) {
 		defer parser.Close()
 
 		// read the object
-		object, err := parser.ReadObject(1)
+		object := parser.ReadObject(1)
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -707,7 +689,7 @@ func TestUnclosedString(test *testing.T) {
 		defer parser.Close()
 
 		// read the object
-		object, err := parser.ReadObject(1)
+		object := parser.ReadObject(1)
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -743,7 +725,7 @@ func TestUnclosedStringEscape(test *testing.T) {
 		defer parser.Close()
 
 		// read the object
-		object, err := parser.ReadObject(1)
+		object := parser.ReadObject(1)
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -779,7 +761,7 @@ func TestUnclosedStringOctal1(test *testing.T) {
 		defer parser.Close()
 
 		// read the object
-		object, err := parser.ReadObject(1)
+		object := parser.ReadObject(1)
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -815,7 +797,7 @@ func TestUnclosedStringOctal2(test *testing.T) {
 		defer parser.Close()
 
 		// read the object
-		object, err := parser.ReadObject(1)
+		object := parser.ReadObject(1)
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -878,7 +860,7 @@ func TestXrefRepair(test *testing.T) {
 	}
 
 	// read the object
-	object, err := parser.ReadObject(9)
+	object := parser.ReadObject(9)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -903,7 +885,7 @@ func TestXrefStreamChain(test *testing.T) {
 	}
 
 	// read the object
-	object, err := parser.ReadObject(10)
+	object := parser.ReadObject(10)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -928,7 +910,7 @@ func TestXrefStreamIndexDefault(test *testing.T) {
 	}
 
 	// read the object
-	object, err := parser.ReadObject(9)
+	object := parser.ReadObject(9)
 	if err != nil {
 		test.Fatal(err)
 	}

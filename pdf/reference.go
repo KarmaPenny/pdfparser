@@ -44,10 +44,7 @@ func (reference *Reference) resolve(resolved_references map[int64]interface{}) O
 	resolved_references[reference.Number] = nil
 
 	// read the object from the pdf
-	object, err := reference.pdf.ReadObject(reference.Number)
-	if err != nil {
-		return NewNullObject()
-	}
+	object := reference.pdf.ReadObject(reference.Number)
 
 	// recursively resolve references
 	if ref, ok := object.Value.(*Reference); ok {

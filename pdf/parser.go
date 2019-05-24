@@ -290,10 +290,7 @@ func (pdf *Parser) readXrefStream() error {
 	pdf.NextObject()
 
 	// read in the stream data
-	data, err := pdf.ReadStream(trailer)
-	if err != nil {
-		return err
-	}
+	data := pdf.ReadStream(trailer)
 	data_reader := bytes.NewReader(data)
 
 	// parse xref subsections
@@ -421,7 +418,7 @@ func (pdf *Parser) RepairXref() error {
 }
 
 // ReadObject reads an object by looking up the number in the xref table
-func (pdf *Parser) ReadObject(number int64) (*IndirectObject, error) {
+func (pdf *Parser) ReadObject(number int64) *IndirectObject {
 	Debug("Reading object %d", number)
 	// create a new indirect object
 	object := NewIndirectObject(number)
@@ -448,7 +445,7 @@ func (pdf *Parser) ReadObject(number int64) (*IndirectObject, error) {
 			// get next string
 			s, err := pdf.NextString()
 			if err != nil {
-				return object, nil
+				return object
 			}
 
 			// if this is a stream object
@@ -460,25 +457,22 @@ func (pdf *Parser) ReadObject(number int64) (*IndirectObject, error) {
 				}
 
 				// read the stream
-				object.Stream, err = pdf.ReadStream(d)
-				if err != nil {
-					return object, WrapError(err, "Failed to read object stream for object %d", number)
-				}
-				return object, nil
+				object.Stream = pdf.ReadStream(d)
+				return object
 			}
 		}
 	}
 
-	// object not fouDone")
-	return object, nil
+	// object not found
+	return object
 }
 
-func (pdf *Parser) ReadStream(d Dictionary) ([]byte, error) {
+func (pdf *Parser) ReadStream(d Dictionary) []byte {
 	// read until new line
 	for {
 		b, err := pdf.tokenizer.ReadByte()
 		if err != nil {
-			return nil, WrapError(err, "Start of stream not found")
+			return []byte{}
 		}
 
 		// if new line then we are at the start of the stream data
@@ -490,14 +484,11 @@ func (pdf *Parser) ReadStream(d Dictionary) ([]byte, error) {
 		if b == '\r' {
 			b, err := pdf.tokenizer.ReadByte()
 			if err != nil {
-				return nil, WrapError(err, "Start of stream not found")
+				return []byte{}
 			}
 			// if not new line then put it back cause it is part of the stream data
 			if b != '\n' {
-				err = pdf.tokenizer.UnreadByte()
-				if err != nil {
-					return nil, WrapError(err, "Start of stream not found")
-				}
+				pdf.tokenizer.UnreadByte()
 			}
 			break
 		}
@@ -559,10 +550,10 @@ func (pdf *Parser) ReadStream(d Dictionary) ([]byte, error) {
 			if err != nil {
 				// stop when decode error enountered
 				Debug("failed to decode stream: %s", err)
-				return stream_data_bytes, nil
+				return stream_data_bytes
 			}
 		}
-		return stream_data_bytes, nil
+		return stream_data_bytes
 	}
 
 	// if single filter
@@ -572,12 +563,12 @@ func (pdf *Parser) ReadStream(d Dictionary) ([]byte, error) {
 		if err != nil {
 			// stop when decode error enountered
 			Debug("failed to decode stream: %s", err)
-			return stream_data_bytes, nil
+			return stream_data_bytes
 		}
 	}
 
 	// no filters applied
-	return stream_data_bytes, nil
+	return stream_data_bytes
 }
 
 func (pdf *Parser) NextInt64() (int64, error) {
