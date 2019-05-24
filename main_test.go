@@ -7,338 +7,395 @@ import (
 	"testing"
 )
 
-// LoadTestPdf returns a loaded parser for the provided pdf_name in the test directory
-func LoadTestPdf(pdf_name string) (*pdf.Parser, error) {
-	// open the pdf
+// OpenTestPdf returns a loaded parser for the provided pdf_name in the test directory
+func OpenTestPdf(pdf_name string) (*pdf.Parser, error) {
 	_, test_path, _, _ := runtime.Caller(0)
 	test_dir := filepath.Dir(test_path)
 	path := filepath.Join(test_dir, "test", pdf_name)
 	return pdf.Open(path)
 }
 
-func TestRepairXref(test *testing.T) {
-	// load the pdf to test
-	parser, err := LoadTestPdf("repair_xref_test.pdf")
-	if err != nil {
-		test.Fatal(err)
-	}
-	defer parser.Close()
-
-	// read the object 1
-	object, err := parser.ReadObject(1)
-	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
-	}
-
-	// assert object 1 value is correct
-	if object.Value.String() != "(Hello)" {
-		test.Fatalf("Incorrect string value: %s", object.Value.String())
-	}
-
-	// read the object 3
-	object, err = parser.ReadObject(3)
-	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
-	}
-
-	// assert object 2 value is correct
-	if object.Value.String() != "(World)" {
-		test.Fatalf("Incorrect string value: %s", object.Value.String())
-	}
-}
-
-// Make sure the default values for index are used if the index array is not present
-func TestXrefStreamMissingIndex(test *testing.T) {
-	// load the pdf to test
-	parser, err := LoadTestPdf("xref_stream_missing_index_test.pdf")
-	if err != nil {
-		test.Fatal(err)
-	}
-	defer parser.Close()
-
-	// read the object 2
-	object, err := parser.ReadObject(2)
-	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
-	}
-
-	// assert object 2 value is correct
-	if object.Value.String() != "(Hello)" {
-		test.Fatalf("Incorrect string value: %s", object.Value.String())
-	}
-}
-
-// make sure streams are still read if the stream start marker is only followed by a carriage return
-func TestStreamCarriageReturn(test *testing.T) {
-	// load the pdf to test
-	parser, err := LoadTestPdf("stream_carriage_return_test.pdf")
-	if err != nil {
-		test.Fatal(err)
-	}
-	defer parser.Close()
-
-	// read the object 2
-	object, err := parser.ReadObject(2)
-	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
-	}
-
-	// assert object 2 value is correct
-	if string(object.Stream) != "Hello" {
-		test.Fatalf("Incorrect stream value: %s", string(object.Stream))
-	}
-}
-
-func TestStrings(test *testing.T) {
-	// load the pdf to test
-	parser, err := LoadTestPdf("strings_test.pdf")
-	if err != nil {
-		test.Fatal(err)
-	}
-	defer parser.Close()
-
-	// read the object 2
-	object, err := parser.ReadObject(2)
-	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
-	}
-
-	// assert object 2 value is correct
-	if object.Value.String() != "(newline\nnewline char\nno newline(balance parens allowed) escaped paren ) \\n Hello?)" {
-		test.Fatalf("Incorrect string value: %s", object.Value.String())
-	}
-}
-
-func TestHexStrings(test *testing.T) {
-	// load the pdf to test
-	parser, err := LoadTestPdf("hex_strings_test.pdf")
-	if err != nil {
-		test.Fatal(err)
-	}
-	defer parser.Close()
-
-	// read object 2
-	object, err := parser.ReadObject(2)
-	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
-	}
-
-	// assert object 2 is "<Hellop>"
-	if object.Value.String() != "<Hellop>" {
-		test.Fatalf("Incorrect string value: %s", object.Value.String())
-	}
-}
-
-func TestEmptyHexString(test *testing.T) {
-	// load the pdf to test
-	parser, err := LoadTestPdf("empty_hex_string_test.pdf")
-	if err != nil {
-		test.Fatal(err)
-	}
-	defer parser.Close()
-
-	// read object 2
-	object, err := parser.ReadObject(2)
-	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
-	}
-
-	// assert object 2 is "<>"
-	if object.Value.String() != "<>" {
-		test.Fatalf("Incorrect string value: %s", object.Value.String())
-	}
-}
-
 func TestComments(test *testing.T) {
-	// load the pdf to test
-	parser, err := LoadTestPdf("comments_test.pdf")
+	// open the pdf
+	parser, err := OpenTestPdf("comments.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
 	defer parser.Close()
 
-	// read object 2
-	object, err := parser.ReadObject(2)
+	// read the object
+	object, err := parser.ReadObject(9)
 	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
+		test.Fatal(err)
 	}
 
-	// assert object 2 is "(%this is not a comment)"
+	// assert value is correct
 	if object.Value.String() != "(%this is not a comment)" {
-		test.Fatalf("Incorrect string value: %s", object.Value.String())
+		test.Fatalf("incorrect value %s", object.Value.String())
+	}
+}
+
+func TestFilterASCII85Decode(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("filter_ascii_85_decode.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// read the object
+	object, err := parser.ReadObject(9)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert value is correct
+	if string(object.Stream) != "\x00\x00\x00\x00%!FontType" {
+		test.Fatalf("incorrect value %s", string(object.Stream))
+	}
+}
+
+func TestFilterASCIIHexDecode(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("filter_ascii_hex_decode.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// read the object
+	object, err := parser.ReadObject(9)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert value is correct
+	if string(object.Stream) != "Hellop" {
+		test.Fatalf("incorrect value %s", string(object.Stream))
+	}
+}
+
+func TestFilterFlateDecode(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("filter_flate_decode.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// read the object
+	object, err := parser.ReadObject(9)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert value is correct
+	if string(object.Stream) != "hello world\nhello world\nhello world\nhello world\nhello world\n" {
+		test.Fatalf("incorrect value %s", string(object.Stream))
+	}
+}
+
+func TestFilterLZWDecode(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("filter_lzw_decode.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// read the object
+	object, err := parser.ReadObject(9)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert value is correct
+	if string(object.Stream) != "hello world!" {
+		test.Fatalf("incorrect value %s", string(object.Stream))
+	}
+}
+
+func TestFilterLZWTiffDecode(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("filter_lzw_tiff_decode.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// read the object
+	object, err := parser.ReadObject(9)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert value is correct
+	if string(object.Stream) != "hello world!" {
+		test.Fatalf("incorrect value %s", string(object.Stream))
+	}
+}
+
+func TestFilterMultiple(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("filter_multiple.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// read the object
+	object, err := parser.ReadObject(9)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert value is correct
+	if string(object.Stream) != "hello world\nhello world\nhello world\nhello world\nhello world\n" {
+		test.Fatalf("incorrect value %s", string(object.Stream))
+	}
+}
+
+func TestFilterRunLengthDecode(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("filter_run_length_decode.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// read the object
+	object, err := parser.ReadObject(9)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert value is correct
+	if string(object.Stream) != "Hello" {
+		test.Fatalf("incorrect value %s", string(object.Stream))
+	}
+}
+
+func TestNames(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("names.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// read object
+	object, err := parser.ReadObject(9)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert value is correct
+	if object.Value.String() != "/Hello /World!" {
+		test.Fatalf("incorrect value %s", object.Value.String())
 	}
 }
 
 func TestReferences(test *testing.T) {
-	// load the pdf to test
-	parser, err := LoadTestPdf("references_test.pdf")
+	// open the pdf
+	parser, err := OpenTestPdf("references.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
 	defer parser.Close()
 
-	// read object 2
-	object, err := parser.ReadObject(2)
+	// read object
+	object, err := parser.ReadObject(1)
 	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
+		test.Fatal(err)
 	}
 
-	// assert object 2 stream is "Hello World"
-	if string(object.Stream) != "Hello World" {
-		test.Fatalf("Incorrect stream value: %s", string(object.Stream))
+	// make sure object is a reference
+	reference, ok := object.Value.(*pdf.Reference)
+	if !ok {
+		test.Fatal("object is not a reference")
+	}
+
+	// resolve the reference
+	resolved_object, err := reference.Resolve()
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert value is correct
+	if resolved_object.String() != "(Hello World!)" {
+		test.Fatalf("incorrect value %s", resolved_object.String())
 	}
 }
 
-func TestMultipleFilters(test *testing.T) {
-	// load the pdf to test
-	parser, err := LoadTestPdf("multiple_filters_test.pdf")
+func TestReferencesInfiniteLoop(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("references.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
 	defer parser.Close()
 
-	// read object 2
-	object, err := parser.ReadObject(2)
-	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
-	}
-
-	// assert object 2 stream is "Hello"
-	if string(object.Stream) != "Hello" {
-		test.Fatalf("Incorrect stream value: %s", string(object.Stream))
-	}
-}
-
-func TestMultipleXrefTable(test *testing.T) {
-	// load the pdf to test
-	parser, err := LoadTestPdf("multiple_xref_table_test.pdf")
-	if err != nil {
-		test.Fatal(err)
-	}
-	defer parser.Close()
-
-	// assert xref length is 10
-	if len(parser.Xref) != 10 {
-		test.Fatalf("Incorrect number of objects in xref: %d", len(parser.Xref))
-	}
-}
-
-func TestMultipleXrefStream(test *testing.T) {
-	// load the pdf to test
-	parser, err := LoadTestPdf("multiple_xref_stream_test.pdf")
-	if err != nil {
-		test.Fatal(err)
-	}
-	defer parser.Close()
-
-	// assert xref length is 17
-	if len(parser.Xref) != 17 {
-		test.Fatalf("Incorrect number of objects in xref")
-	}
-
-	// read the third object
+	// read object
 	object, err := parser.ReadObject(3)
 	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
+		test.Fatal(err)
 	}
 
-	// assert object 3 value is "(Hello)"
-	if object.Value.String() != "(Hello)" {
-		test.Fatalf("object.Value != (Hello)")
+	// make sure object is a reference
+	reference, ok := object.Value.(*pdf.Reference)
+	if !ok {
+		test.Fatal("object is not a reference")
+	}
+
+	// resolve the reference
+	resolved_object, err := reference.Resolve()
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert value is correct
+	if resolved_object.String() != "null" {
+		test.Fatalf("incorrect value %s", resolved_object.String())
 	}
 }
 
-func TestASCIIHexDecodeFilter(test *testing.T) {
-	// load the pdf to test
-	// open pdf for this test
-	parser, err := LoadTestPdf("ascii_hex_decode_test.pdf")
+func TestStreamCarriageReturn(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("stream_carriage_return.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
 	defer parser.Close()
 
-	// read the first object
-	object, err := parser.ReadObject(1)
-	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
-	}
-
-	// assert object stream is "Hellop"
-	if string(object.Stream) != "Hellop" {
-		test.Fatalf("stream != Hellop")
-	}
-}
-
-func TestASCII85DecodeFilter(test *testing.T) {
-	// load the pdf to test
-	// open pdf for this test
-	parser, err := LoadTestPdf("ascii_85_decode_test.pdf")
+	// read the object
+	object, err := parser.ReadObject(9)
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer parser.Close()
 
-	// read the first object
-	object, err := parser.ReadObject(1)
-	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
-	}
-
-	// assert object stream is correct
-	if string(object.Stream) != "\x00\x00\x00\x00%!FontType" {
-		test.Fatalf("incorrect stream value: %s", string(object.Stream))
-	}
-}
-
-func TestFlateDecodeFilter(test *testing.T) {
-	// load the pdf to test
-	// open pdf for this test
-	parser, err := LoadTestPdf("flate_decode_test.pdf")
-	if err != nil {
-		test.Fatal(err)
-	}
-	defer parser.Close()
-
-	// read the first object
-	_, err = parser.ReadObject(1)
-	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
-	}
-}
-
-func TestLZWDecodeFilter(test *testing.T) {
-	// load the pdf to test
-	// open pdf for this test
-	parser, err := LoadTestPdf("lzw_decode_test.pdf")
-	if err != nil {
-		test.Fatal(err)
-	}
-	defer parser.Close()
-
-	// read the first object
-	_, err = parser.ReadObject(1)
-	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
-	}
-}
-
-func TestRunLengthDecodeFilter(test *testing.T) {
-	// load the pdf to test
-	// open pdf for this test
-	parser, err := LoadTestPdf("run_length_decode_test.pdf")
-	if err != nil {
-		test.Fatal(err)
-	}
-	defer parser.Close()
-
-	// read the first object
-	object, err := parser.ReadObject(1)
-	if err != nil {
-		test.Fatalf("Failed to read object: %s", err)
-	}
-
-	// assert object stream is "Hello"
+	// assert value is correct
 	if string(object.Stream) != "Hello" {
-		test.Fatalf("hello != %s", string(object.Stream))
+		test.Fatalf("incorrect value %s", string(object.Stream))
+	}
+}
+
+func TestStrings(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("strings.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// read the object
+	object, err := parser.ReadObject(9)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// make sure object is an array
+	array, ok := object.Value.(pdf.Array)
+	if !ok {
+		test.Fatal("object is not an Array")
+	}
+
+	// assert values are correct
+	if array[0].String() != "(newline\nnewline char\nno newline(balance parens allowed) escaped paren ) \\n Hello?)" {
+		test.Fatalf("incorrect value %s", array[0].String())
+	}
+	if array[1].String() != "<Hellop>" {
+		test.Fatalf("incorrect value %s", array[1].String())
+	}
+	if array[2].String() != "<>" {
+		test.Fatalf("incorrect value %s", array[2].String())
+	}
+}
+
+func TestXrefRepair(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("xref_repair.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// assert xref length is correct
+	if len(parser.Xref) != 9 {
+		test.Fatalf("%d != 9", len(parser.Xref))
+	}
+
+	// read the object
+	object, err := parser.ReadObject(9)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert values are correct
+	if object.Value.String() != "(Hello world)" {
+		test.Fatalf("incorrect value %s", object.Value.String())
+	}
+}
+
+func TestXrefStreamChain(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("xref_stream_chain.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// assert xref length is correct
+	if len(parser.Xref) != 11 {
+		test.Fatalf("%d != 11", len(parser.Xref))
+	}
+
+	// read the object
+	object, err := parser.ReadObject(10)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert values are correct
+	if object.Value.String() != "(Hello World!)" {
+		test.Fatalf("incorrect value %s", object.Value.String())
+	}
+}
+
+func TestXrefStreamIndexDefault(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("xref_stream_index_default.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// assert xref length is correct
+	if len(parser.Xref) != 10 {
+		test.Fatalf("%d != 10", len(parser.Xref))
+	}
+
+	// read the object
+	object, err := parser.ReadObject(9)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert values are correct
+	if object.Value.String() != "(Hello World!)" {
+		test.Fatalf("incorrect value %s", object.Value.String())
+	}
+}
+
+func TestXrefTableChain(test *testing.T) {
+	// open the pdf
+	parser, err := OpenTestPdf("xref_table_chain.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// assert xref length is correct
+	if len(parser.Xref) != 10 {
+		test.Fatal("xref length != 10")
 	}
 }

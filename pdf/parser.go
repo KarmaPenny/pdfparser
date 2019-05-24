@@ -240,7 +240,7 @@ func (pdf *Parser) readXrefTable() error {
 
 // readXrefStream reads an xref stream object into pdf.Xref
 func (pdf *Parser) readXrefStream() error {
-	// skip generation number and obj start marker
+	// skip object number, generation and start marker
 	pdf.NextObject()
 	pdf.NextObject()
 
