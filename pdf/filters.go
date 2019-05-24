@@ -107,10 +107,6 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 	return decoded_data, nil
 }
 
-func IsHex(b byte) bool {
-	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
-}
-
 func ASCII85Decode(data []byte) ([]byte, error) {
 	reader := bytes.NewReader(data)
 	decoded_data := bytes.NewBuffer([]byte{})

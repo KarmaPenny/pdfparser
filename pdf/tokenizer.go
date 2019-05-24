@@ -112,8 +112,9 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 					// convert code into byte
 					val, err := strconv.ParseUint(string(code.Bytes()), 8, 8)
 					if err != nil {
-						token.Write(code.Bytes())
-						continue
+						// octal code is too large so ignore last byte
+						tokenizer.UnreadByte()
+						val, _ = strconv.ParseUint(string(code.Bytes()[:code.Len()-1]), 8, 8)
 					}
 					b = byte(val)
 				}
@@ -156,20 +157,22 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 
 			// if next byte is the start of a hex character code
 			if b == '#' {
-				// read the next 2 bytes
-				code := make([]byte, 2)
-				bytes_read, _ := tokenizer.Read(code)
-				for ; bytes_read < len(code); bytes_read++ {
-						code[bytes_read] = byte('0')
+				// read in the hex code
+				code := []byte{'0', '0'}
+				for i := 0; i < 2; i++ {
+					b, err = tokenizer.ReadByte()
+					if err != nil {
+						break
+					}
+					if !IsHex(b) {
+						tokenizer.UnreadByte()
+						break
+					}
+					code[i] = b
 				}
 
 				// convert the hex code to a byte
-				val, err := strconv.ParseUint(string(code), 16, 8)
-				if err != nil {
-					token.WriteByte(b)
-					token.Write(code)
-					continue
-				}
+				val, _ := strconv.ParseUint(string(code), 16, 8)
 				b = byte(val)
 			}
 
@@ -181,7 +184,7 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 	// if start of hex string or dictionary
 	if b == '<' {
 		// get next byte
-		b, err = tokenizer.SkipWhitespace()
+		b, err = tokenizer.ReadByte()
 		if err != nil {
 			token.WriteByte('>')
 			return token, nil
@@ -191,53 +194,31 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 		if b == '<' {
 			token.WriteByte(b)
 			return token, nil
+		} else {
+			tokenizer.UnreadByte()
 		}
 
+		// read hex code pairs until end of hex string or file
 		for {
-			// if end of hex string
-			if b == '>' {
-				// add terminating marker to token and return
-				token.WriteByte('>')
-				return token, nil
-			}
-
-			// get next byte
-			b2, err := tokenizer.SkipWhitespace()
-			if err != nil {
-				token.WriteByte('>')
-				return token, nil
-			}
-
-			// early end of hex string last character is assumed to be 0
-			if b2 == '>' {
-				// add decoded byte to token
-				v, err := strconv.ParseUint(string([]byte{b, '0'}), 16, 8)
-				if err != nil {
-					token.WriteByte(b)
-					token.WriteByte('0')
+			code := []byte{'0', '0'}
+			for i := 0; i < 2; {
+				b, err = tokenizer.SkipWhitespace()
+				if err != nil || b == '>' {
+					if i > 0 {
+						val, _ := strconv.ParseUint(string(code), 16, 8)
+						token.WriteByte(byte(val))
+					}
 					token.WriteByte('>')
 					return token, nil
 				}
-				token.WriteByte(byte(v))
-				token.WriteByte('>')
-				return token, nil
+				if !IsHex(b) {
+					continue
+				}
+				code[i] = b
+				i++
 			}
-
-			// add decoded byte to token
-			v, err := strconv.ParseUint(string([]byte{b, b2}), 16, 8)
-			if err != nil {
-				token.WriteByte(b)
-				token.WriteByte(b2)
-			} else {
-				token.WriteByte(byte(v))
-			}
-
-			// get next byte
-			b, err = tokenizer.SkipWhitespace()
-			if err != nil {
-				token.WriteByte('>')
-				return token, nil
-			}
+			val, _ := strconv.ParseUint(string(code), 16, 8)
+			token.WriteByte(byte(val))
 		}
 	}
 

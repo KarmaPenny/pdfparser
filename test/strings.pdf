@@ -1,11 +1,10 @@
-%PDF-1.7
-
-9 0 obj
+1 0 obj
 [
 (newline
 newline char\nno newline\
-(balance parens allowed) escaped paren \) \\n \110ello\77)
-< 4 8	656c6C6f7>
+(balance parens allowed) escaped paren \) \\n \110ello\77\777)
+< 4 8	656c6C6fg7ignor>
 <>
+()
 ]
 endobj

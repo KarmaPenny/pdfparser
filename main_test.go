@@ -25,13 +25,53 @@ func TestComments(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(9)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
 
 	// assert value is correct
 	if object.Value.String() != "(%this is not a comment)" {
+		test.Fatalf("incorrect value %s", object.Value.String())
+	}
+}
+
+func TestEmptyArray(test *testing.T) {
+	// open the pdf
+	parser, err := openTestPdf("empty_array.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// read the object
+	object, err := parser.ReadObject(1)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert value is correct
+	if object.Value.String() != "[]" {
+		test.Fatalf("incorrect value %s", object.Value.String())
+	}
+}
+
+func TestEmptyDictionary(test *testing.T) {
+	// open the pdf
+	parser, err := openTestPdf("empty_dictionary.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer parser.Close()
+
+	// read the object
+	object, err := parser.ReadObject(1)
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	// assert value is correct
+	if object.Value.String() != "<<>>" {
 		test.Fatalf("incorrect value %s", object.Value.String())
 	}
 }
@@ -45,7 +85,7 @@ func TestFilterASCII85Decode(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(9)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -65,7 +105,7 @@ func TestFilterASCIIHexDecode(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(9)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -85,7 +125,7 @@ func TestFilterFlateDecode(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(9)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -105,7 +145,7 @@ func TestFilterLZWDecode(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(9)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -125,7 +165,7 @@ func TestFilterLZWTiffDecode(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(9)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -145,7 +185,7 @@ func TestFilterMultiple(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(9)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -165,7 +205,7 @@ func TestFilterRunLengthDecode(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(9)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -185,13 +225,13 @@ func TestNames(test *testing.T) {
 	defer parser.Close()
 
 	// read object
-	object, err := parser.ReadObject(9)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
 
 	// assert value is correct
-	if object.Value.String() != "/Hello /World!" {
+	if object.Value.String() != "/Hello /World!\x00qz" {
 		test.Fatalf("incorrect value %s", object.Value.String())
 	}
 }
@@ -317,7 +357,7 @@ func TestStreamCarriageReturn(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(9)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -337,7 +377,7 @@ func TestStrings(test *testing.T) {
 	defer parser.Close()
 
 	// read the object
-	object, err := parser.ReadObject(9)
+	object, err := parser.ReadObject(1)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -349,13 +389,16 @@ func TestStrings(test *testing.T) {
 	}
 
 	// assert values are correct
-	if array[0].String() != "(newline\nnewline char\nno newline(balance parens allowed) escaped paren ) \\n Hello?)" {
+	if array[0].String() != "(newline\nnewline char\nno newline(balance parens allowed) escaped paren ) \\n Hello??7)" {
 		test.Fatalf("incorrect value %s", array[0].String())
 	}
 	if array[1].String() != "<Hellop>" {
 		test.Fatalf("incorrect value %s", array[1].String())
 	}
 	if array[2].String() != "<>" {
+		test.Fatalf("incorrect value %s", array[2].String())
+	}
+	if array[3].String() != "()" {
 		test.Fatalf("incorrect value %s", array[2].String())
 	}
 }
@@ -443,6 +486,41 @@ func TestUnclosedDictionary(test *testing.T) {
 
 		// open the pdf
 		parser, err := openTestPdf("unclosed_dictionary.pdf")
+		if err != nil {
+			test.Fatal(err)
+		}
+		defer parser.Close()
+
+		// read the object
+		object, err := parser.ReadObject(1)
+		if err != nil {
+			test.Fatal(err)
+		}
+
+		// make sure object value is correct
+		if object.Value.String() != "<<>>" {
+			test.Fatalf("incorrect value %s", object.Value.String())
+		}
+	}()
+
+	// wait until done or timed out
+	select {
+		case <-done:
+		case <-time.After(time.Second):
+			test.Fatal("timed out")
+	}
+}
+func TestUnclosedDictionaryKey(test *testing.T) {
+	// create a done signal channel
+	done := make(chan bool, 1)
+
+	// run test in background
+	go func() {
+		// send done signal when returning
+		defer func() {done <- true}()
+
+		// open the pdf
+		parser, err := openTestPdf("unclosed_dictionary_key.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}

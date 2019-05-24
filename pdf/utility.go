@@ -17,3 +17,8 @@ func ReadInt(reader io.Reader, width int64) (v int64, err error) {
 	}
 	return v, nil
 }
+
+// IsHex returns true if the byte is a hex character
+func IsHex(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+}
