@@ -49,8 +49,7 @@ func (tokenizer *Tokenizer) NextToken() (*Token, error) {
 				// read next byte
 				b, err = tokenizer.ReadByte()
 				if err != nil {
-					token.WriteByte(b)
-					token.WriteByte(b)
+					token.WriteByte('\\')
 					token.WriteByte(')')
 					return token, nil
 				}

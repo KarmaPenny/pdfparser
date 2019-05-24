@@ -414,12 +414,15 @@ func (pdf *Parser) RepairXref() error {
 			return err
 		}
 	}
+
 	Debug("repaired")
+	Debug("loaded %d xref entries", len(pdf.Xref))
 	return nil
 }
 
 // ReadObject reads an object by looking up the number in the xref table
 func (pdf *Parser) ReadObject(number int64) (*IndirectObject, error) {
+	Debug("Reading object %d", number)
 	// create a new indirect object
 	object := NewIndirectObject(number)
 
@@ -433,12 +436,14 @@ func (pdf *Parser) ReadObject(number int64) (*IndirectObject, error) {
 			pdf.Seek(xref_entry.Offset, io.SeekStart)
 
 			// skip object number, generation and start marker
-			object.Value = pdf.NextObject()
-			object.Value = pdf.NextObject()
-			object.Value = pdf.NextObject()
+			pdf.NextObject()
+			pdf.NextObject()
+			pdf.NextObject()
 
 			// get the value of the object
-			object.Value = pdf.NextObject()
+			Debug("Reading object value")
+			object.Value, _ = pdf.NextObject()
+			Debug("Done")
 
 			// get next string
 			s, err := pdf.NextString()
@@ -464,7 +469,7 @@ func (pdf *Parser) ReadObject(number int64) (*IndirectObject, error) {
 		}
 	}
 
-	// object not found, return null object
+	// object not fouDone")
 	return object, nil
 }
 
@@ -588,7 +593,7 @@ func (pdf *Parser) NextInt64() (int64, error) {
 }
 
 func (pdf *Parser) NextString() (string , error) {
-	object := pdf.NextObject()
+	object, _ := pdf.NextObject()
 	if s, ok := object.(*Token); ok {
 		return s.String(), nil
 	}
@@ -596,18 +601,18 @@ func (pdf *Parser) NextString() (string , error) {
 }
 
 func (pdf *Parser) NextDictionary() (Dictionary, error) {
-	object := pdf.NextObject()
+	object, _ := pdf.NextObject()
 	if d, ok := object.(Dictionary); ok {
 		return d, nil
 	}
 	return nil, NewError("Expected Dictionary")
 }
 
-func (pdf *Parser) NextObject() Object {
+func (pdf *Parser) NextObject() (Object, error) {
 	// get next token
 	token, err := pdf.tokenizer.NextToken()
 	if err != nil {
-		return NewNullObject()
+		return NewNullObject(), err
 	}
 
 	// if the next 3 tokens form a reference
@@ -621,27 +626,31 @@ func (pdf *Parser) NextObject() Object {
 		if err1 == nil && err2 == nil && generation_token.IsNumber && reference_token.String() == "R" {
 			number, _:= strconv.ParseInt(token.String(), 10, 64)
 			generation, _ := strconv.ParseInt(generation_token.String(), 10, 64)
-			return NewReference(pdf, number, generation)
+			return NewReference(pdf, number, generation), nil
 		}
 
 		// token is not a reference so revert tokenizer
 		pdf.Seek(current_offset, io.SeekStart)
-		return token
+		return token, nil
 	}
 
 	// if token is array start
 	if token.String() == "[" {
+
 		// create new array
 		array := Array{}
 
 		// parse all elements
 		for {
 			// get next object
-			next_object := pdf.NextObject()
+			next_object, err := pdf.NextObject()
+			if err != nil {
+				return array, nil
+			}
 
 			// return if next object is array end
 			if t, ok := next_object.(*Token); ok && t.String() == "]" {
-				return array
+				return array, nil
 			}
 
 			// add next object to array
@@ -659,19 +668,19 @@ func (pdf *Parser) NextObject() Object {
 			// next object should be a key or dictionary end
 			key, err := pdf.NextString()
 			if err != nil {
-				return dictionary
+				return dictionary, nil
 			}
 
 			// return if key is dictionary end
 			if key == ">>" {
-				return dictionary
+				return dictionary, nil
 			}
 
 			// add key value pair to dictionary
-			dictionary[key] = pdf.NextObject()
+			dictionary[key], _ = pdf.NextObject()
 		}
 	}
 
 	// return token
-	return token
+	return token, nil
 }
