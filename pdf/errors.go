@@ -5,8 +5,6 @@ import (
 	"runtime/debug"
 )
 
-var ErrorUnsupported *Error = NewError("Unsupported")
-
 // error that includes stack trace
 type Error struct {
 	message string

@@ -44,7 +44,7 @@ func DecodeStream(filter string, data []byte, decode_parms Dictionary) ([]byte, 
 
 	// filter is not supported
 	Debug("%s filter not supported", filter)
-	return data, ErrorUnsupported
+	return data, NewError("Unsupported")
 }
 
 func ASCIIHexDecode(data []byte) ([]byte, error) {
@@ -282,7 +282,7 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 
 	// this is really hard with non byte length components so we don't support them
 	if bits_per_component != 8 {
-		return data, ErrorUnsupported
+		return data, NewError("Unsupported")
 	}
 
 	// determine row widths

@@ -556,12 +556,10 @@ func (pdf *Parser) ReadStream(d Dictionary) ([]byte, error) {
 		for i, filter := range filter_list {
 			decode_parms, _ := decode_parms_list.GetDictionary(i)
 			stream_data_bytes, err = DecodeStream(filter.String(), stream_data_bytes, decode_parms)
-			if err == ErrorUnsupported {
-				// stop when unsupported feature is encountered
-				break
-			}
 			if err != nil {
-				return stream_data_bytes, err
+				// stop when decode error enountered
+				Debug("failed to decode stream: %s", err)
+				return stream_data_bytes, nil
 			}
 		}
 		return stream_data_bytes, nil
@@ -571,8 +569,10 @@ func (pdf *Parser) ReadStream(d Dictionary) ([]byte, error) {
 	if filter, err := d.GetObject("/Filter"); err == nil {
 		decode_parms, _ := d.GetDictionary("/DecodeParms")
 		stream_data_bytes, err = DecodeStream(filter.String(), stream_data_bytes, decode_parms)
-		if err != nil && err != ErrorUnsupported {
-			return stream_data_bytes, err
+		if err != nil {
+			// stop when decode error enountered
+			Debug("failed to decode stream: %s", err)
+			return stream_data_bytes, nil
 		}
 	}
 
