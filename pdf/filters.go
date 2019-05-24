@@ -43,6 +43,7 @@ func DecodeStream(filter string, data []byte, decode_parms Dictionary) ([]byte, 
 	}
 
 	// filter is not supported
+	Debug("%s filter not supported", filter)
 	return data, ErrorUnsupported
 }
 
@@ -307,7 +308,7 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 			for c := 1; c < columns; c++ {
 				for i := 0; i < colors; i++ {
 					pos := r * row_width + c * colors + i
-					if pos > len(data) {
+					if pos >= len(data) {
 						break
 					}
 					data[pos] = byte((int(data[pos]) + int(data[pos - colors])) % 256)
