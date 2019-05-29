@@ -18,27 +18,27 @@ func DecodeStream(filter string, data []byte, decode_parms Dictionary) ([]byte, 
 	}
 
 	// apply hex filter
-	if filter == "/ASCIIHexDecode" {
+	if filter == "ASCIIHexDecode" {
 		return ASCIIHexDecode(data)
 	}
 
 	// apply ascii 85 filter
-	if filter == "/ASCII85Decode" {
+	if filter == "ASCII85Decode" {
 		return ASCII85Decode(data)
 	}
 
 	// apply run length filter
-	if filter == "/RunLengthDecode" {
+	if filter == "RunLengthDecode" {
 		return RunLengthDecode(data)
 	}
 
 	// apply zlib filter
-	if filter == "/FlateDecode" {
+	if filter == "FlateDecode" {
 		return FlateDecode(data, decode_parms)
 	}
 
 	// apply lzw filter
-	if filter == "/LZWDecode" {
+	if filter == "LZWDecode" {
 		return LZWDecode(data, decode_parms)
 	}
 
@@ -239,7 +239,7 @@ func FlateDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
 func LZWDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
 	// create lzw reader from data using different implementation based on early change parm
 	var lzw_reader io.ReadCloser
-	early_change, err := decode_parms.GetInt("/EarlyChange")
+	early_change, err := decode_parms.GetInt("EarlyChange")
 	if err != nil {
 		early_change = 1
 	}
@@ -263,19 +263,19 @@ func LZWDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
 
 func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 	// get predictor parms using default when not found
-	predictor, err := decode_parms.GetInt("/Predictor")
+	predictor, err := decode_parms.GetInt("Predictor")
 	if err != nil {
 		predictor = 1
 	}
-	bits_per_component, err := decode_parms.GetInt("/BitsPerComponent")
+	bits_per_component, err := decode_parms.GetInt("BitsPerComponent")
 	if err != nil {
 		bits_per_component = 8
 	}
-	colors, err := decode_parms.GetInt("/Colors")
+	colors, err := decode_parms.GetInt("Colors")
 	if err != nil {
 		colors = 1
 	}
-	columns, err := decode_parms.GetInt("/Columns")
+	columns, err := decode_parms.GetInt("Columns")
 	if err != nil {
 		columns = 1
 	}

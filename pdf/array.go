@@ -1,7 +1,6 @@
 package pdf
 
 import (
-	"strconv"
 	"strings"
 )
 
@@ -20,28 +19,30 @@ func (a Array) String() string {
 	return s.String()
 }
 
-func (a Array) GetInt(index int) (int, error) {
+func (a Array) GetArray(index int) (Array, error) {
 	object, err := a.GetObject(index)
 	if err != nil {
-		return 0, err
+		return Array{}, err
 	}
-	i, err := strconv.ParseInt(object.String(), 10, 32)
-	if err != nil {
-		return 0, WrapError(err, "Array element at %d is not an int32", index)
+	if array, ok := object.(Array); ok {
+		return array, nil
 	}
-	return int(i), nil
+	return Array{}, NewError("Expected array")
 }
 
-func (a Array) GetInt64(index int) (int64, error) {
+func (a Array) GetBool(index int) (bool, error) {
 	object, err := a.GetObject(index)
 	if err != nil {
-		return 0, err
+		return false, err
 	}
-	i, err := strconv.ParseInt(object.String(), 10, 64)
-	if err != nil {
-		return 0, WrapError(err, "Array element at %d is not an int64", index)
+	if keyword, ok := object.(Keyword); ok {
+		if keyword == KEYWORD_TRUE {
+			return true, nil
+		} else if keyword == KEYWORD_FALSE {
+			return false, nil
+		}
 	}
-	return i, nil
+	return false, NewError("Expected bool")
 }
 
 func (a Array) GetDictionary(index int) (Dictionary, error) {
@@ -52,17 +53,59 @@ func (a Array) GetDictionary(index int) (Dictionary, error) {
 	if dictionary, ok := object.(Dictionary); ok {
 		return dictionary, nil
 	}
-	return Dictionary{}, NewError("Array element at %d is not Dictionary", index)
+	return Dictionary{}, NewError("Expected dictionary")
 }
 
-// GetObject gets an object from an array, resolving references if needed
-func (a Array) GetObject(index int) (Object, error) {
-	if index < len(a) || index < 0 {
-		object := a[index]
-		if reference, ok := object.(*Reference); ok {
-			return reference.Resolve()
-		}
-		return object, nil
+func (a Array) GetInt(index int) (int, error) {
+	number, err := a.GetNumber(index)
+	return int(number), err
+}
+
+func (a Array) GetInt64(index int) (int64, error) {
+	number, err := a.GetNumber(index)
+	return int64(number), err
+}
+
+func (a Array) GetName(index int) (string, error) {
+	object, err := a.GetObject(index)
+	if err != nil {
+		return "", err
 	}
-	return NewNullObject(), NewError("Array index [%d] out of bounds: %d", index, len(a))
+	if name, ok := object.(Name); ok {
+		return string(name), nil
+	}
+	return "", NewError("Expected name")
+}
+
+func (a Array) GetNumber(index int) (Number, error) {
+	object, err := a.GetObject(index)
+	if err != nil {
+		return Number(0), err
+	}
+	if number, ok := object.(Number); ok {
+		return number, nil
+	}
+	return Number(0), NewError("Expected number")
+}
+
+func (a Array) GetObject(index int) (Object, error) {
+	if index < 0 || index >= len(a) {
+		return KEYWORD_NULL, NewError("index out of bounds")
+	}
+	object := a[index]
+	if reference, ok := object.(*Reference); ok {
+		return reference.Resolve(), nil
+	}
+	return object, nil
+}
+
+func (a Array) GetString(index int) (string, error) {
+	object, err := a.GetObject(index)
+	if err != nil {
+		return "", err
+	}
+	if s, ok := object.(String); ok {
+		return string(s), nil
+	}
+	return "", NewError("Expected string")
 }

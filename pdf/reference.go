@@ -6,12 +6,12 @@ import (
 )
 
 type Reference struct {
-	pdf *Parser
-	Number int64
-	Generation int64
+	pdf *Pdf
+	Number int
+	Generation int
 }
 
-func NewReference(pdf *Parser, number int64, generation int64) *Reference {
+func NewReference(pdf *Pdf, number int, generation int) *Reference {
 	return &Reference{pdf, number, generation}
 }
 
@@ -19,27 +19,24 @@ func (reference *Reference) String() string {
 	return fmt.Sprintf("%d %d R", reference.Number, reference.Generation)
 }
 
-func (reference *Reference) Resolve() (Object, error) {
+func (reference *Reference) Resolve() Object {
 	// save current offset so we can come back
-	current_offset, err := reference.pdf.CurrentOffset()
-	if err != nil {
-		return nil, err
-	}
+	current_offset := reference.pdf.CurrentOffset()
 
 	// resolve the referenced object value
-	object := reference.resolve(map[int64]interface{}{})
+	object := reference.resolve(map[int]interface{}{})
 
 	// revert offset
-	_, err = reference.pdf.Seek(current_offset, io.SeekStart)
+	reference.pdf.Seek(current_offset, io.SeekStart)
 
 	// return the object
-	return object, err
+	return object
 }
 
-func (reference *Reference) resolve(resolved_references map[int64]interface{}) Object {
+func (reference *Reference) resolve(resolved_references map[int]interface{}) Object {
 	// prevent infinite loop
 	if _, ok := resolved_references[reference.Number]; ok {
-		return NewNullObject()
+		return KEYWORD_NULL
 	}
 	resolved_references[reference.Number] = nil
 
