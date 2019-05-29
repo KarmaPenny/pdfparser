@@ -804,7 +804,7 @@ func (pdf *Pdf) readName() (Name, error) {
 		return Name(name.String()), err
 	}
 	if b == '>' {
-		pdf.Discard(1)
+		pdf.Discard(1) // discard rest of dict end marker
 		return Name(name.String()), EndOfDictionary
 	}
 	if b != '/' {
