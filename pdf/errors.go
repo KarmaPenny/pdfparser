@@ -9,6 +9,7 @@ import (
 var EndOfArray = errors.New("End of array")
 var EndOfDictionary = errors.New("End of dictionary")
 var ErrorRead = errors.New("Read failed")
+var ErrorPassword = errors.New("Incorrect password")
 
 // error that includes stack trace
 type Error struct {
