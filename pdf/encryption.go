@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 )
 
-var padding_string []byte = []byte("\x28\xbf\x4e\x5e\x4e\x75\x8a\x41\x64\x00\x4e\x56\xff\xfa\x01\x08\x2e\x2e\x00\xb6\x3e\x80\x2f\x0c\xa9\xfe\x64\x53\x69\x7a")
+var padding_string []byte = []byte("\x28\xBF\x4E\x5E\x4E\x75\x8A\x41\x64\x00\x4E\x56\xFF\xFA\x01\x08\x2E\x2E\x00\xB6\xD0\x68\x3E\x80\x2F\x0C\xA9\xFE\x64\x53\x69\x7A")
 
 func compute_encryption_key(password []byte, trailer Dictionary) ([]byte, error) {
 	// pad or truncate password to exactly 32 bytes
@@ -17,25 +17,26 @@ func compute_encryption_key(password []byte, trailer Dictionary) ([]byte, error)
 	}
 
 	// get the encrypt dictionary
-	encrypt, err := trailer.GetDictionary("/Encrypt")
+	encrypt, err := trailer.GetDictionary("Encrypt")
 	if err != nil {
 		return nil, err
 	}
+	Debug("Encrypt = %s", encrypt.String())
 
 	// get O entry from encrypt dictionary
-	o_entry, err := encrypt.GetString("/O")
+	o_entry, err := encrypt.GetString("O")
 	if err != nil {
 		return nil, err
 	}
 
 	// get U entry from encrypt dictionary
-	u_entry, err := encrypt.GetString("/U")
+	u_entry, err := encrypt.GetString("U")
 	if err != nil {
 		return nil, err
 	}
 
 	// get P entry from encrypt dictionary
-	p_entry, err := encrypt.GetInt("/P")
+	p_entry, err := encrypt.GetInt("P")
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +44,7 @@ func compute_encryption_key(password []byte, trailer Dictionary) ([]byte, error)
 	binary.LittleEndian.PutUint32(p_value, uint32(p_entry))
 
 	// get the id array from trailer dictionary
-	ids, err := trailer.GetArray("/ID")
+	ids, err := trailer.GetArray("ID")
 	if err != nil {
 		return nil, err
 	}
@@ -53,22 +54,19 @@ func compute_encryption_key(password []byte, trailer Dictionary) ([]byte, error)
 	}
 
 	// get R entry from encrypt dictionary
-	revision, err := encrypt.GetInt("/R")
+	revision, err := encrypt.GetInt("R")
 	if err != nil {
 		return nil, err
 	}
 
-	// get EncryptMetaData entry from encrypt dictionary
-	encrypt_meta_data := true
-	encrypt_meta_data_object, err := encrypt.GetObject("/EncryptMetaData")
-	if err == nil {
-		if encrypt_meta_data_object.String() == "false" {
-			encrypt_meta_data = false
-		}
+	// get EncryptMetaData entry from encrypt dictionary, default true
+	encrypt_meta_data, err := encrypt.GetBool("EncryptMetaData")
+	if err != nil {
+		encrypt_meta_data = true
 	}
 
 	// get key length from encrypt dictionary
-	key_length, err := encrypt.GetInt("/Length")
+	key_length, err := encrypt.GetInt("Length")
 	if err != nil {
 		key_length = 40
 	}
@@ -84,10 +82,11 @@ func compute_encryption_key(password []byte, trailer Dictionary) ([]byte, error)
 
 	// create md5sum from all the things
 	hash := md5.New()
+	hash.Write(password)
 	hash.Write([]byte(o_entry))
 	hash.Write(p_value)
 	hash.Write([]byte(id0))
-	if revision == 4 && !encrypt_meta_data {
+	if revision >= 4 && !encrypt_meta_data {
 		hash.Write([]byte("\xff\xff\xff\xff"))
 	}
 	encryption_key := hash.Sum(nil)
@@ -100,6 +99,9 @@ func compute_encryption_key(password []byte, trailer Dictionary) ([]byte, error)
 		}
 	}
 
+	// truncate key to correct size
+	encryption_key = encryption_key[:key_length]
+
 	// if revision 2 use algorithm 4
 	if revision == 2 {
 		cipher, err := rc4.NewCipher(encryption_key)
@@ -111,6 +113,7 @@ func compute_encryption_key(password []byte, trailer Dictionary) ([]byte, error)
 		u_computed := make([]byte, 32)
 		cipher.XORKeyStream(u_computed, padding_string)
 		if string(u_computed) != u_entry {
+			Debug("%x != %x", []byte(u_entry), u_computed)
 			return encryption_key, NewError("Incorrect Password")
 		}
 		return encryption_key, nil
@@ -140,6 +143,7 @@ func compute_encryption_key(password []byte, trailer Dictionary) ([]byte, error)
 			cipher.XORKeyStream(crypt_sum, crypt_sum)
 		}
 		if string([]byte(u_entry)[:16]) != string(crypt_sum) {
+			Debug("%x != %x", []byte(u_entry)[:16], crypt_sum)
 			return encryption_key, NewError("Incorrect Password")
 		}
 		return encryption_key, nil

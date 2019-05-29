@@ -42,6 +42,9 @@ func main() {
 	// check if pdf is encrypted
 	if PDF.IsEncrypted() {
 		fmt.Fprintln(os.Stderr, "Encrypted")
+		if PDF.SetPassword("") {
+			fmt.Fprintln(os.Stderr, "Password is empty")
+		}
 		os.Exit(1)
 	}
 

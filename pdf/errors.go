@@ -1,9 +1,14 @@
 package pdf
 
 import (
+	"errors"
 	"fmt"
 	"runtime/debug"
 )
+
+var EndOfArray = errors.New("End of array")
+var EndOfDictionary = errors.New("End of dictionary")
+var ErrorRead = errors.New("Read failed")
 
 // error that includes stack trace
 type Error struct {

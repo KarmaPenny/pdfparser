@@ -186,6 +186,23 @@ func TestFilterRunLengthDecode(test *testing.T) {
 	}
 }
 
+func TestMalformedDictionaryKey(test *testing.T) {
+	// open the pdf
+	PDF, err := openTestPdf("malformed_dictionary_key.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer PDF.Close()
+
+	// read object
+	object := PDF.ReadObject(1)
+
+	// assert value is correct
+	if object.Value.String() != "<</MalformedReference 45/HiddenObject (Hello World)>>" {
+		test.Fatalf("incorrect value %s", object.Value.String())
+	}
+}
+
 func TestNames(test *testing.T) {
 	// open the pdf
 	PDF, err := openTestPdf("names.pdf")

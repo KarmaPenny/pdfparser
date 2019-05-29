@@ -3,7 +3,6 @@ package pdf
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"io"
 	"os"
 	"regexp"
@@ -16,8 +15,6 @@ var start_xref_regexp = regexp.MustCompile(`startxref\s*(\d+)\s*%%EOF`)
 var start_obj_regexp = regexp.MustCompile(`\d+([\s\x00]|(%[^\n]*\n))+\d+([\s\x00]|(%[^\n]*\n))+obj`)
 var whitespace = []byte("\x00\t\n\f\r ")
 var delimiters = []byte("()<>[]/%")
-var EndOfArray = errors.New("End of array")
-var EndOfDictionary = errors.New("End of dictionary")
 
 type Pdf struct {
 	*bufio.Reader
@@ -25,6 +22,7 @@ type Pdf struct {
 	Xref map[int]*XrefEntry
 	xref_offsets map[int64]interface{}
 	trailer Dictionary
+	encryption_key []byte
 }
 
 func Open(path string) (*Pdf, error) {
@@ -32,7 +30,7 @@ func Open(path string) (*Pdf, error) {
 	if err != nil {
 		return nil, err
 	}
-	pdf := &Pdf{bufio.NewReader(file), file, map[int]*XrefEntry{}, map[int64]interface{}{}, Dictionary{}}
+	pdf := &Pdf{bufio.NewReader(file), file, map[int]*XrefEntry{}, map[int64]interface{}{}, Dictionary{}, []byte{}}
 
 	// find the start xref offset and load the xref
 	start_xref_offset, err := pdf.getStartXrefOffset()
@@ -82,6 +80,16 @@ func (pdf *Pdf) CurrentOffset() int64 {
 
 func (pdf *Pdf) IsEncrypted() bool {
 	return pdf.trailer.Contains("Encrypt")
+}
+
+func (pdf *Pdf) SetPassword(password string) bool {
+	encryption_key, err := compute_encryption_key([]byte(password), pdf.trailer)
+	if err != nil {
+		Debug(err.Error())
+		return false
+	}
+	pdf.encryption_key = encryption_key
+	return true
 }
 
 // getStartXrefOffset returns the offset to the first xref table
@@ -537,9 +545,9 @@ func (pdf *Pdf) readObject() (Object, error) {
 	pdf.ConsumeWhitespace()
 
 	// peek at next 2 bytes to determine object type
-	b, err := pdf.Peek(2)
+	b, _ := pdf.Peek(2)
 	if len(b) == 0 {
-		return KEYWORD_NULL, err
+		return KEYWORD_NULL, ErrorRead
 	}
 
 	// handle names
@@ -623,7 +631,7 @@ func (pdf *Pdf) readArray() (Array, error) {
 	// read start of array marker
 	b, err := pdf.ReadByte()
 	if err != nil {
-		return array, err
+		return array, ErrorRead
 	}
 	if b != '[' {
 		return array, NewError("Expected [")
@@ -632,7 +640,8 @@ func (pdf *Pdf) readArray() (Array, error) {
 	// read in elements and append to array
 	for {
 		element, err := pdf.readObject()
-		if err != nil {
+		if err == ErrorRead || err == EndOfArray {
+			// stop if at eof or end of array
 			break
 		}
 		array = append(array, element)
@@ -653,7 +662,7 @@ func (pdf *Pdf) readDictionary() (Dictionary, error) {
 	b := make([]byte, 2)
 	_, err := pdf.Read(b)
 	if err != nil {
-		return dictionary, err
+		return dictionary, ErrorRead
 	}
 	if string(b) != "<<" {
 		return dictionary, NewError("Expected <<")
@@ -663,8 +672,12 @@ func (pdf *Pdf) readDictionary() (Dictionary, error) {
 	for {
 		// get key
 		key, err := pdf.readName()
-		if err != nil {
+		if err == ErrorRead || err == EndOfDictionary {
+			// stop if at eof or end of dictionary
 			break
+		} else if err != nil {
+			// unexpected error, keep chugging
+			continue
 		}
 
 		// get value
@@ -673,8 +686,8 @@ func (pdf *Pdf) readDictionary() (Dictionary, error) {
 		// add key value pair to dictionary
 		dictionary[string(key)] = value
 
-		// if the value was returned with an error then stop
-		if err != nil {
+		// stop if at eof or end of dictionary
+		if err == ErrorRead || err == EndOfDictionary {
 			break
 		}
 	}
@@ -691,7 +704,7 @@ func (pdf *Pdf) readHexString() (String, error) {
 	// read start of hex string marker
 	b, err := pdf.ReadByte()
 	if err != nil {
-		return String(s.String()), err
+		return String(s.String()), ErrorRead
 	}
 	if b != '<' {
 		return String(s.String()), NewError("Expected <")
@@ -801,11 +814,18 @@ func (pdf *Pdf) readName() (Name, error) {
 	// read start of name marker
 	b, err := pdf.ReadByte()
 	if err != nil {
-		return Name(name.String()), err
+		return Name(name.String()), ErrorRead
 	}
 	if b == '>' {
-		pdf.Discard(1) // discard rest of dict end marker
-		return Name(name.String()), EndOfDictionary
+		b, err = pdf.ReadByte()
+		if err != nil {
+			return Name(name.String()), ErrorRead
+		}
+		if b == '>' {
+			return Name(name.String()), EndOfDictionary
+		}
+		pdf.UnreadByte()
+		return Name(name.String()), NewError("Expected >>")
 	}
 	if b != '/' {
 		return Name(name.String()), NewError("Expected /")
@@ -864,7 +884,7 @@ func (pdf *Pdf) readNumber() (Number, error) {
 	// process first byte
 	b, err := pdf.ReadByte()
 	if err != nil {
-		return number, err
+		return number, ErrorRead
 	}
 	if b == '-' {
 		isNegative = true
@@ -930,7 +950,7 @@ func (pdf *Pdf) readString() (String, error) {
 	// read start of string marker
 	b, err := pdf.ReadByte()
 	if err != nil {
-		return String(s.String()), err
+		return String(s.String()), ErrorRead
 	}
 	if b != '(' {
 		return String(s.String()), NewError("Expected (")
