@@ -7,6 +7,8 @@ import (
 	"os"
 )
 
+var password *string
+
 // print help info
 func usage() {
 	fmt.Fprintln(os.Stderr, "PDF Parser - decodes a pdf file")
@@ -19,6 +21,7 @@ func usage() {
 // parse cmd args
 func parse_args() {
 	pdf.Verbose = flag.Bool("v", false, "display verbose messages")
+	password = flag.String("p", "", "set encryption password")
 	flag.Usage = usage
 	flag.Parse()
 	if flag.NArg() == 0 {
@@ -41,11 +44,10 @@ func main() {
 
 	// check if pdf is encrypted
 	if PDF.IsEncrypted() {
-		fmt.Fprintln(os.Stderr, "Encrypted")
-		if PDF.SetPassword("") {
-			fmt.Fprintln(os.Stderr, "Password is empty")
+		if !PDF.SetPassword(*password) {
+			fmt.Fprintln(os.Stderr, "Encrypted")
+			os.Exit(1)
 		}
-		os.Exit(1)
 	}
 
 	// print all indirect objects in xref
@@ -59,7 +61,7 @@ func main() {
 			fmt.Println(object.Value)
 			if object.Stream != nil {
 				fmt.Println("stream")
-				fmt.Println(object.Stream)
+				fmt.Println(string(object.Stream))
 				fmt.Println("endstream")
 			}
 			fmt.Println("endobj")
