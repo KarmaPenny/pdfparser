@@ -268,7 +268,6 @@ func (pdf *Pdf) readXrefStream() error {
 
 	// skip stream start marker
 	if keyword, err := pdf.readKeyword(); err != nil || keyword != KEYWORD_STREAM {
-		Debug("%d", pdf.CurrentOffset())
 		return NewError("Expected stream keyword")
 	}
 
@@ -408,10 +407,10 @@ func (pdf *Pdf) ReadObject(number int) *IndirectObject {
 			// get the value of the object
 			Debug("Reading object value")
 			object.Value, _ = pdf.readObject()
-			Debug("Done")
 
 			// get next keyword
 			if keyword, err := pdf.readKeyword(); err == nil && keyword == KEYWORD_STREAM {
+				Debug("Reading object stream")
 				// get stream dictionary
 				d, ok := object.Value.(Dictionary)
 				if !ok {
@@ -424,6 +423,7 @@ func (pdf *Pdf) ReadObject(number int) *IndirectObject {
 		}
 	}
 
+	Debug("Done")
 	return object
 }
 
@@ -552,6 +552,7 @@ func (pdf *Pdf) readObject() (Object, error) {
 		return pdf.readArray()
 	}
 	if b[0] == ']' {
+		pdf.Discard(1)
 		return KEYWORD_NULL, EndOfArray
 	}
 
@@ -566,6 +567,7 @@ func (pdf *Pdf) readObject() (Object, error) {
 			return pdf.readDictionary()
 		}
 		if b[0] == '>' && b[1] == '>' {
+			pdf.Discard(2)
 			return KEYWORD_NULL, EndOfDictionary
 		}
 	}
@@ -666,10 +668,15 @@ func (pdf *Pdf) readDictionary() (Dictionary, error) {
 		}
 
 		// get value
-		value, _ := pdf.readObject()
+		value, err := pdf.readObject()
 
 		// add key value pair to dictionary
 		dictionary[string(key)] = value
+
+		// if the value was returned with an error then stop
+		if err != nil {
+			break
+		}
 	}
 	return dictionary, nil
 }
@@ -796,6 +803,10 @@ func (pdf *Pdf) readName() (Name, error) {
 	if err != nil {
 		return Name(name.String()), err
 	}
+	if b == '>' {
+		pdf.Discard(1)
+		return Name(name.String()), EndOfDictionary
+	}
 	if b != '/' {
 		return Name(name.String()), NewError("Expected /")
 	}
@@ -804,7 +815,7 @@ func (pdf *Pdf) readName() (Name, error) {
 		// read in the next byte
 		b, err = pdf.ReadByte()
 		if err != nil {
-			return Name(name.String()), err
+			return Name(name.String()), nil
 		}
 
 		// if the next byte is whitespace or delimiter then unread it and return the name
