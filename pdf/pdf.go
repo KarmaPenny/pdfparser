@@ -570,14 +570,12 @@ func (pdf *Pdf) readObject() (Object, error) {
 	}
 
 	// handle dictionaries
-	if len(b) > 1 {
-		if b[0] == '<' && b[1] == '<' {
-			return pdf.readDictionary()
-		}
-		if b[0] == '>' && b[1] == '>' {
-			pdf.Discard(2)
-			return KEYWORD_NULL, EndOfDictionary
-		}
+	if string(b) == "<<" {
+		return pdf.readDictionary()
+	}
+	if string(b) == ">>" {
+		pdf.Discard(2)
+		return KEYWORD_NULL, EndOfDictionary
 	}
 
 	// handle hex strings
@@ -607,7 +605,7 @@ func (pdf *Pdf) readObject() (Object, error) {
 			return number, nil
 		}
 
-		// if not a reference then rever to saved offset and return the number
+		// if not a reference then revert to saved offset and return the number
 		if keyword, err := pdf.readKeyword(); err != nil || keyword != KEYWORD_R {
 			pdf.Seek(offset, io.SeekStart)
 			return number, nil
@@ -617,7 +615,7 @@ func (pdf *Pdf) readObject() (Object, error) {
 		return NewReference(pdf, int(number), generation), nil
 	}
 
-	// report unknown token
+	// report unknown object
 	return KEYWORD_NULL, NewError("Expected array, dictionary, keyword, name, number, reference or string")
 }
 
@@ -670,13 +668,13 @@ func (pdf *Pdf) readDictionary() (Dictionary, error) {
 
 	// parse all key value pairs
 	for {
-		// get key
-		key, err := pdf.readName()
+		// read next object
+		name, err := pdf.readObject()
 		if err == ErrorRead || err == EndOfDictionary {
-			// stop if at eof or end of dictionary
 			break
-		} else if err != nil {
-			// unexpected error, keep chugging
+		}
+		key, isName := name.(Name)
+		if !isName || err != nil {
 			continue
 		}
 
@@ -815,17 +813,6 @@ func (pdf *Pdf) readName() (Name, error) {
 	b, err := pdf.ReadByte()
 	if err != nil {
 		return Name(name.String()), ErrorRead
-	}
-	if b == '>' {
-		b, err = pdf.ReadByte()
-		if err != nil {
-			return Name(name.String()), ErrorRead
-		}
-		if b == '>' {
-			return Name(name.String()), EndOfDictionary
-		}
-		pdf.UnreadByte()
-		return Name(name.String()), NewError("Expected >>")
 	}
 	if b != '/' {
 		return Name(name.String()), NewError("Expected /")

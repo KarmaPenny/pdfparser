@@ -14,7 +14,7 @@ const (
 	KEYWORD_NULL
 	KEYWORD_TRUE
 	KEYWORD_FALSE
-	KEYWORD_UNKNOWN
+	KEYWORD_INVALID
 )
 
 type Keyword int
@@ -48,7 +48,7 @@ func NewKeyword(keyword string) (Keyword, error) {
 		case "false":
 		return KEYWORD_FALSE, nil
 		default:
-		return KEYWORD_UNKNOWN, NewError("Unknown Keyword")
+		return KEYWORD_INVALID, ErrorKeyword
 	}
 }
 
@@ -81,6 +81,6 @@ func (keyword Keyword) String() string {
 		case KEYWORD_FALSE:
 		return "false"
 		default:
-		return "unknown"
+		return "invalid"
 	}
 }
