@@ -650,6 +650,7 @@ func (pdf *Pdf) readObject(string_filter CryptFilter) (Object, error) {
 	}
 
 	// report unknown object
+	pdf.Discard(1)
 	return KEYWORD_NULL, NewError("Expected array, dictionary, keyword, name, number, reference or string")
 }
 
