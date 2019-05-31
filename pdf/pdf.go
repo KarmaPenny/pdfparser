@@ -24,6 +24,7 @@ type Pdf struct {
 	trailer Dictionary
 	encryption_key []byte
 	security_handler *SecurityHandler
+	xref_streams map[int]interface{}
 }
 
 func Open(path string, password string) (*Pdf, error) {
@@ -31,7 +32,7 @@ func Open(path string, password string) (*Pdf, error) {
 	if err != nil {
 		return nil, err
 	}
-	pdf := &Pdf{bufio.NewReader(file), file, map[int]*XrefEntry{}, map[int64]interface{}{}, Dictionary{}, []byte{}, nil}
+	pdf := &Pdf{bufio.NewReader(file), file, map[int]*XrefEntry{}, map[int64]interface{}{}, Dictionary{}, []byte{}, nil, map[int]interface{}{}}
 
 	// find the start xref offset and load the xref
 	if start_xref_offset, err := pdf.getStartXrefOffset(); err == nil {
@@ -125,7 +126,8 @@ func (pdf *Pdf) loadXref(offset int64) error {
 	pdf.Seek(offset, io.SeekStart)
 
 	// if xref is a stream
-	if _, err := pdf.readInt(); err == nil {
+	if n, err := pdf.readInt(); err == nil {
+		pdf.xref_streams[n] = nil
 		return pdf.readXrefStream()
 	}
 
@@ -528,7 +530,7 @@ func (pdf *Pdf) readStream(n int, g int, d Dictionary) []byte {
 
 	// decrypt stream
 	var crypt_filter CryptFilter = noFilter
-	if pdf.security_handler != nil {
+	if _, whitelisted := pdf.xref_streams[n]; pdf.security_handler != nil && !whitelisted {
 		if t, _ := d.GetName("Type"); t == "EmbeddedFile" {
 			crypt_filter = pdf.security_handler.file_filter
 		} else {
