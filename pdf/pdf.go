@@ -545,7 +545,9 @@ func (pdf *Pdf) readStream(n int, g int, d Dictionary) []byte {
 					crypt_filter = cf
 				}
 				filter_list = filter_list[1:]
-				decode_parms_list = decode_parms_list[1:]
+				if len(decode_parms_list) > 0 {
+					decode_parms_list = decode_parms_list[1:]
+				}
 			}
 		}
 	}
