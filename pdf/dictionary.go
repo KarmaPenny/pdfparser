@@ -50,6 +50,11 @@ func (d Dictionary) GetBool(key string) (bool, error) {
 	return false, NewError("Expected bool")
 }
 
+func (d Dictionary) GetBytes(key string) ([]byte, error) {
+	s, err := d.GetString(key)
+	return []byte(s), err
+}
+
 func (d Dictionary) GetDictionary(key string) (Dictionary, error) {
 	object, err := d.GetObject(key)
 	if err != nil {

@@ -10,7 +10,6 @@ var EndOfArray = errors.New("end of array")
 var EndOfDictionary = errors.New("end of dictionary")
 var ErrorRead = errors.New("read failed")
 var ErrorPassword = errors.New("incorrect password")
-var ErrorKeyword = errors.New("invalid keyword")
 
 // error that includes stack trace
 type Error struct {

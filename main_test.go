@@ -13,7 +13,7 @@ func openTestPdf(pdf_name string) (*pdf.Pdf, error) {
 	_, test_path, _, _ := runtime.Caller(0)
 	test_dir := filepath.Dir(test_path)
 	path := filepath.Join(test_dir, "test", pdf_name)
-	return pdf.Open(path)
+	return pdf.Open(path, "")
 }
 
 func TestComments(test *testing.T) {
@@ -64,6 +64,31 @@ func TestEmptyDictionary(test *testing.T) {
 	// assert value is correct
 	if object.Value.String() != "<<>>" {
 		test.Fatalf("incorrect value %s", object.Value.String())
+	}
+}
+
+func TestEncrypted(test *testing.T) {
+	// open the pdf
+	PDF, err := openTestPdf("encrypted.pdf")
+	if err != nil {
+		test.Fatal(err)
+	}
+	defer PDF.Close()
+
+	// test string decryption
+	object := PDF.ReadObject(12)
+	d12, ok := object.Value.(pdf.Dictionary)
+	if !ok {
+		test.Fatalf("expected dictionary")
+	}
+	if lang, err := d12.GetString("Lang"); err != nil || lang != "en-US" {
+		test.Fatalf("incorrect value %s", lang)
+	}
+
+	// test stream decryption
+	object = PDF.ReadObject(8)
+	if string(object.Stream[:8]) != "/CIDInit" {
+		test.Fatalf("incorrect value %s", string(object.Stream[:8]))
 	}
 }
 

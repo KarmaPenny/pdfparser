@@ -45,6 +45,11 @@ func (a Array) GetBool(index int) (bool, error) {
 	return false, NewError("Expected bool")
 }
 
+func (a Array) GetBytes(index int) ([]byte, error) {
+	s, err := a.GetString(index)
+	return []byte(s), err
+}
+
 func (a Array) GetDictionary(index int) (Dictionary, error) {
 	object, err := a.GetObject(index)
 	if err != nil {

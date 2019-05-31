@@ -23,40 +23,30 @@ type Pdf struct {
 	xref_offsets map[int64]interface{}
 	trailer Dictionary
 	encryption_key []byte
+	security_handler *SecurityHandler
 }
 
-func Open(path string) (*Pdf, error) {
+func Open(path string, password string) (*Pdf, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	pdf := &Pdf{bufio.NewReader(file), file, map[int]*XrefEntry{}, map[int64]interface{}{}, Dictionary{}, []byte{}}
+	pdf := &Pdf{bufio.NewReader(file), file, map[int]*XrefEntry{}, map[int64]interface{}{}, Dictionary{}, []byte{}, nil}
 
 	// find the start xref offset and load the xref
-	start_xref_offset, err := pdf.getStartXrefOffset()
-	if err != nil {
-		Debug("startxref not found")
-		pdf.RepairXref()
-		return pdf, nil
+	if start_xref_offset, err := pdf.getStartXrefOffset(); err == nil {
+		if err = pdf.loadXref(start_xref_offset); err == nil {
+			if err = pdf.IsXrefValid(); err == nil {
+				if pdf.IsEncrypted() && !pdf.SetPassword(password) {
+					return pdf, ErrorPassword
+				}
+				return pdf, nil
+			}
+		}
 	}
 
-	// load the xref from start xref offset
-	err = pdf.loadXref(start_xref_offset)
-	if err != nil {
-		Debug("failed to load xref: %s", err)
-		pdf.RepairXref()
-		return pdf, nil
-	}
-
-	// validate xref
-	err = pdf.IsXrefValid()
-	if err != nil {
-		Debug("invalid xref: %s", err)
-		pdf.RepairXref()
-		return pdf, nil
-	}
-
-	Debug("loaded %d xref entries", len(pdf.Xref))
+	// failed to load xref, attempt to repair it
+	pdf.RepairXref()
 	return pdf, nil
 }
 
@@ -83,12 +73,11 @@ func (pdf *Pdf) IsEncrypted() bool {
 }
 
 func (pdf *Pdf) SetPassword(password string) bool {
-	encryption_key, err := compute_encryption_key([]byte(password), pdf.trailer)
+	sh, err := NewSecurityHandler([]byte(password), pdf.trailer)
 	if err != nil {
-		Debug(err.Error())
 		return false
 	}
-	pdf.encryption_key = encryption_key
+	pdf.security_handler = sh
 	return true
 }
 
@@ -202,7 +191,7 @@ func (pdf *Pdf) readXrefTable() error {
 	}
 
 	// read in trailer dictionary
-	trailer, err := pdf.readDictionary()
+	trailer, err := pdf.readDictionary(noFilter)
 	if err != nil {
 		return err
 	}
@@ -233,7 +222,7 @@ func (pdf *Pdf) readXrefStream() error {
 	}
 
 	// get the stream dictionary which is also the trailer dictionary
-	trailer, err := pdf.readDictionary()
+	trailer, err := pdf.readDictionary(noFilter)
 	if err != nil {
 		return err
 	}
@@ -280,7 +269,7 @@ func (pdf *Pdf) readXrefStream() error {
 	}
 
 	// read in the stream data
-	data := pdf.readStream(trailer)
+	data := pdf.readStream(0, 0, trailer)
 	data_reader := bytes.NewReader(data)
 
 	// parse xref subsections
@@ -412,9 +401,16 @@ func (pdf *Pdf) ReadObject(number int) *IndirectObject {
 			pdf.readInt()
 			pdf.readKeyword()
 
+			// initialize string decryption filter
+			var string_filter CryptFilter = noFilter
+			if pdf.security_handler != nil {
+				string_filter = pdf.security_handler.string_filter
+			}
+			string_filter = string_filter.Init(number, xref_entry.Generation)
+
 			// get the value of the object
 			Debug("Reading object value")
-			object.Value, _ = pdf.readObject()
+			object.Value, _ = pdf.readObject(string_filter)
 
 			// get next keyword
 			if keyword, err := pdf.readKeyword(); err == nil && keyword == KEYWORD_STREAM {
@@ -426,7 +422,7 @@ func (pdf *Pdf) ReadObject(number int) *IndirectObject {
 				}
 
 				// read the stream
-				object.Stream = pdf.readStream(d)
+				object.Stream = pdf.readStream(number, xref_entry.Generation, d)
 			}
 		}
 	}
@@ -435,7 +431,7 @@ func (pdf *Pdf) ReadObject(number int) *IndirectObject {
 	return object
 }
 
-func (pdf *Pdf) readStream(d Dictionary) []byte {
+func (pdf *Pdf) readStream(n int, g int, d Dictionary) []byte {
 	// create buffers for stream data
 	stream_data := bytes.NewBuffer([]byte{})
 
@@ -509,38 +505,67 @@ func (pdf *Pdf) readStream(d Dictionary) []byte {
 	// get stream_data_bytes
 	stream_data_bytes := stream_data.Bytes()
 
-	// if list of filters
-	if filter_list, err := d.GetArray("Filter"); err == nil {
-		decode_parms_list, _ := d.GetArray("DecodeParms")
-		for i := 0; i < len(filter_list); i++ {
-			filter, _ := filter_list.GetName(i)
-			decode_parms, _ := decode_parms_list.GetDictionary(i)
-			stream_data_bytes, err = DecodeStream(string(filter), stream_data_bytes, decode_parms)
-			if err != nil {
-				// stop when decode error enountered
-				Debug("failed to decode stream: %s", err)
-				return stream_data_bytes
-			}
+	// create list of filters
+	filter_list, err := d.GetArray("Filter")
+	if err != nil {
+		if filter, err := d.GetName("Filter"); err == nil {
+			filter_list = Array{Name(filter)}
+		} else {
+			filter_list = Array{}
 		}
-		return stream_data_bytes
 	}
 
-	// if single filter
-	if filter, err := d.GetName("Filter"); err == nil {
-		decode_parms, _ := d.GetDictionary("DecodeParms")
-		stream_data_bytes, err = DecodeStream(string(filter), stream_data_bytes, decode_parms)
+	// create list of decode parms
+	decode_parms_list, err := d.GetArray("DecodeParms")
+	if err != nil {
+		if decode_parms, err := d.GetDictionary("DecodeParms"); err == nil {
+			decode_parms_list = Array{decode_parms}
+		} else {
+			decode_parms_list = Array{}
+		}
+	}
+
+	// decrypt stream
+	var crypt_filter CryptFilter = noFilter
+	if pdf.security_handler != nil {
+		if t, _ := d.GetName("Type"); t == "EmbeddedFile" {
+			crypt_filter = pdf.security_handler.file_filter
+		} else {
+			crypt_filter = pdf.security_handler.stream_filter
+		}
+		if len(filter_list) > 0 {
+			if filter, _ := filter_list.GetName(0); filter == "Crypt" {
+				decode_parms, _ := decode_parms_list.GetDictionary(0)
+				filter_name, err := decode_parms.GetName("Name")
+				if err != nil {
+					filter_name = "Identity"
+				}
+				if cf, exists := pdf.security_handler.crypt_filters[filter_name]; exists {
+					crypt_filter = cf
+				}
+				filter_list = filter_list[1:]
+				decode_parms_list = decode_parms_list[1:]
+			}
+		}
+	}
+	crypt_filter = crypt_filter.Init(n, g)
+	stream_data_bytes = crypt_filter.Decrypt(stream_data_bytes)
+
+	// decode stream
+	for i := 0; i < len(filter_list); i++ {
+		filter, _ := filter_list.GetName(i)
+		decode_parms, _ := decode_parms_list.GetDictionary(i)
+		stream_data_bytes, err = DecodeStream(filter, stream_data_bytes, decode_parms)
 		if err != nil {
 			// stop when decode error enountered
 			Debug("failed to decode stream: %s", err)
 			return stream_data_bytes
 		}
 	}
-
-	// no filters applied
 	return stream_data_bytes
 }
 
-func (pdf *Pdf) readObject() (Object, error) {
+func (pdf *Pdf) readObject(string_filter CryptFilter) (Object, error) {
 	// consume any leading whitespace/comments
 	pdf.ConsumeWhitespace()
 
@@ -557,7 +582,7 @@ func (pdf *Pdf) readObject() (Object, error) {
 
 	// handle arrays
 	if b[0] == '[' {
-		return pdf.readArray()
+		return pdf.readArray(string_filter)
 	}
 	if b[0] == ']' {
 		pdf.Discard(1)
@@ -566,12 +591,14 @@ func (pdf *Pdf) readObject() (Object, error) {
 
 	// handle strings
 	if b[0] == '(' {
-		return pdf.readString()
+		s, err := pdf.readString()
+		s = String(string_filter.Decrypt([]byte(s)))
+		return s, err
 	}
 
 	// handle dictionaries
 	if string(b) == "<<" {
-		return pdf.readDictionary()
+		return pdf.readDictionary(string_filter)
 	}
 	if string(b) == ">>" {
 		pdf.Discard(2)
@@ -580,7 +607,9 @@ func (pdf *Pdf) readObject() (Object, error) {
 
 	// handle hex strings
 	if b[0] == '<' {
-		return pdf.readHexString()
+		s, err := pdf.readHexString()
+		s = String(string_filter.Decrypt([]byte(s)))
+		return s, err
 	}
 
 	// handle keywords
@@ -619,7 +648,7 @@ func (pdf *Pdf) readObject() (Object, error) {
 	return KEYWORD_NULL, NewError("Expected array, dictionary, keyword, name, number, reference or string")
 }
 
-func (pdf *Pdf) readArray() (Array, error) {
+func (pdf *Pdf) readArray(string_filter CryptFilter) (Array, error) {
 	// consume any leading whitespace/comments
 	pdf.ConsumeWhitespace()
 
@@ -637,7 +666,7 @@ func (pdf *Pdf) readArray() (Array, error) {
 
 	// read in elements and append to array
 	for {
-		element, err := pdf.readObject()
+		element, err := pdf.readObject(string_filter)
 		if err == ErrorRead || err == EndOfArray {
 			// stop if at eof or end of array
 			break
@@ -649,7 +678,7 @@ func (pdf *Pdf) readArray() (Array, error) {
 	return array, nil
 }
 
-func (pdf *Pdf) readDictionary() (Dictionary, error) {
+func (pdf *Pdf) readDictionary(string_filter CryptFilter) (Dictionary, error) {
 	// consume any leading whitespace/comments
 	pdf.ConsumeWhitespace()
 
@@ -669,7 +698,7 @@ func (pdf *Pdf) readDictionary() (Dictionary, error) {
 	// parse all key value pairs
 	for {
 		// read next object
-		name, err := pdf.readObject()
+		name, err := pdf.readObject(string_filter)
 		if err == ErrorRead || err == EndOfDictionary {
 			break
 		}
@@ -679,7 +708,7 @@ func (pdf *Pdf) readDictionary() (Dictionary, error) {
 		}
 
 		// get value
-		value, err := pdf.readObject()
+		value, err := pdf.readObject(string_filter)
 
 		// add key value pair to dictionary
 		dictionary[string(key)] = value

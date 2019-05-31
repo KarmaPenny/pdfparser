@@ -48,7 +48,7 @@ func NewKeyword(keyword string) (Keyword, error) {
 		case "false":
 		return KEYWORD_FALSE, nil
 		default:
-		return KEYWORD_INVALID, ErrorKeyword
+		return KEYWORD_INVALID, NewError("Unknown keyword")
 	}
 }
 
