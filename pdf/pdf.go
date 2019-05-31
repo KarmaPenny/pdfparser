@@ -1094,9 +1094,37 @@ func (pdf *Pdf) ConsumeWhitespace() {
 
 		// consume comments and whitespace
 		if b == '%' {
-			pdf.ReadBytes('\n')
+			pdf.ConsumeComment()
 		} else if bytes.IndexByte(whitespace, b) < 0 {
 			pdf.UnreadByte()
+			return
+		}
+	}
+}
+
+func (pdf *Pdf) ConsumeComment() {
+	for {
+		// get next byte
+		b, err := pdf.ReadByte()
+		if err != nil {
+			return
+		}
+
+		// stop on line feed
+		if b == '\n' {
+			return
+		}
+
+		// stop on carriage return
+		if b == '\r' {
+			// consume optional line feed
+			b, err := pdf.ReadByte()
+			if err != nil {
+				return
+			}
+			if b != '\n' {
+				pdf.UnreadByte()
+			}
 			return
 		}
 	}
