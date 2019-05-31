@@ -38,6 +38,7 @@ func Open(path string, password string) (*Pdf, error) {
 		if err = pdf.loadXref(start_xref_offset); err == nil {
 			if err = pdf.IsXrefValid(); err == nil {
 				if pdf.IsEncrypted() && !pdf.SetPassword(password) {
+					pdf.Close()
 					return pdf, ErrorPassword
 				}
 				return pdf, nil

@@ -35,15 +35,14 @@ func main() {
 	PDF, err := pdf.Open("test.pdf", "password")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return
 	}
 	defer PDF.Close()
 
 	// print all indirect objects in xref
 	for n, entry := range PDF.Xref {
 		if entry.Type == pdf.XrefTypeIndirectObject {
-			object := PDF.ReadObject(n)
-			fmt.Println(object)
+			fmt.Println(PDF.ReadObject(n))
 		}
 	}
 }
