@@ -24,7 +24,7 @@ type Pdf struct {
 	trailer Dictionary
 	encryption_key []byte
 	security_handler *SecurityHandler
-	xref_streams map[int]interface{}
+	whitelisted_objects map[int]interface{}
 }
 
 func Open(path string, password string) (*Pdf, error) {
@@ -38,9 +38,14 @@ func Open(path string, password string) (*Pdf, error) {
 	if start_xref_offset, err := pdf.getStartXrefOffset(); err == nil {
 		if err = pdf.loadXref(start_xref_offset); err == nil {
 			if err = pdf.IsXrefValid(); err == nil {
-				if pdf.IsEncrypted() && !pdf.SetPassword(password) {
-					pdf.Close()
-					return pdf, ErrorPassword
+				if encrypt, ok := pdf.trailer["Encrypt"]; ok {
+					if ref, ok := encrypt.(*Reference); ok {
+						pdf.whitelisted_objects[ref.Number] = nil
+					}
+					if !pdf.SetPassword(password) {
+						pdf.Close()
+						return pdf, ErrorPassword
+					}
 				}
 				return pdf, nil
 			}
@@ -68,10 +73,6 @@ func (pdf *Pdf) CurrentOffset() int64 {
 		return 0
 	}
 	return offset - int64(pdf.Buffered())
-}
-
-func (pdf *Pdf) IsEncrypted() bool {
-	return pdf.trailer.Contains("Encrypt")
 }
 
 func (pdf *Pdf) SetPassword(password string) bool {
@@ -127,7 +128,7 @@ func (pdf *Pdf) loadXref(offset int64) error {
 
 	// if xref is a stream
 	if n, err := pdf.readInt(); err == nil {
-		pdf.xref_streams[n] = nil
+		pdf.whitelisted_objects[n] = nil
 		return pdf.readXrefStream()
 	}
 
@@ -530,7 +531,7 @@ func (pdf *Pdf) readStream(n int, g int, d Dictionary) []byte {
 
 	// decrypt stream
 	var crypt_filter CryptFilter = noFilter
-	if _, whitelisted := pdf.xref_streams[n]; pdf.security_handler != nil && !whitelisted {
+	if _, whitelisted := pdf.whitelisted_objects[n]; pdf.security_handler != nil && !whitelisted {
 		if t, _ := d.GetName("Type"); t == "EmbeddedFile" {
 			crypt_filter = pdf.security_handler.file_filter
 		} else {
