@@ -280,15 +280,16 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 		columns = 1
 	}
 
-	// this is really hard with non byte length components so we don't support them
-	if bits_per_component != 8 {
-		return data, NewError("Unsupported")
+	// make sure bits_per_component value is acceptable
+	if bits_per_component <= 0 || bits_per_component > 16 {
+		return data, NewError("Invalid bits_per_component value: %d", bits_per_component)
 	}
 
-	// determine row widths
-	row_width := columns * colors
-
-	// invalid width
+	// determine row widths in bytes
+	row_width := (bits_per_component * colors * columns) / 8
+	if (bits_per_component * colors * columns) % 8 > 0 {
+		row_width++
+	}
 	if row_width <= 0 {
 		return data, NewError("Invalid predictor row width: %d", row_width)
 	}
@@ -301,13 +302,16 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 	// TIFF predictor
 	if predictor == 2 {
 		for r := 0; r * row_width < len(data); r ++ {
+			row_start := r * row_width * 8
 			for c := 1; c < columns; c++ {
 				for i := 0; i < colors; i++ {
-					pos := r * row_width + c * colors + i
-					if pos >= len(data) {
-						break
+					pos := row_start + ((c * colors + i) * bits_per_component)
+					if pos >= len(data) * 8 {
+						return data, nil
 					}
-					data[pos] = byte((int(data[pos]) + int(data[pos - colors])) % 256)
+					prev_value := GetBits(data, pos - (colors * bits_per_component), bits_per_component)
+					value := GetBits(data, pos, bits_per_component)
+					SetBits(data, pos, bits_per_component, value + prev_value)
 				}
 			}
 		}
