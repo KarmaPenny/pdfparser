@@ -1,5 +1,5 @@
 # PDF Parser
-PDF Parser is a command line tool and go library for decoding PDFs
+PDF Parser is a command line tool and go library for decoding and decrypting PDFs
 
 ## Installation
 First, [Install Go](https://golang.org/doc/install#install)
