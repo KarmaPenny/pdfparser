@@ -4,10 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"github.com/KarmaPenny/pdfparser/pdf"
+	"github.com/KarmaPenny/pdfparser/logger"
 	"os"
 )
 
 var password *string
+var extract_dir *string
 
 func main() {
 	// parse cmd args
@@ -27,18 +29,26 @@ func main() {
 			fmt.Println(PDF.ReadObject(n))
 		}
 	}
+
+	PDF.ExtractFiles(*extract_dir)
 }
 
 // parse cmd args
 func parse_args() {
-	pdf.Verbose = flag.Bool("v", false, "display verbose messages")
-	password = flag.String("p", "", "set encryption password")
+	logger.Verbose = flag.Bool("v", false, "display verbose messages")
+	password = flag.String("p", "", "encryption password")
+	extract_dir = flag.String("d", "", "extraction directory")
 	flag.Usage = usage
 	flag.Parse()
 	if flag.NArg() == 0 {
 		usage()
 		os.Exit(1)
 	}
+	if *extract_dir == "" {
+		*extract_dir = flag.Arg(0) + ".extracted"
+	}
+	//os.RemoveAll(*extract_dir)
+	os.Mkdir(*extract_dir, 0755)
 }
 
 // print help info

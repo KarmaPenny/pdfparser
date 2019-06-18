@@ -108,6 +108,16 @@ func (d Dictionary) GetObject(key string) (Object, error) {
 	return KEYWORD_NULL, NewError("Dictionary does not contain key: %s", key)
 }
 
+func (d Dictionary) GetReference(key string) (*Reference, error) {
+	if object, ok := d[key]; ok {
+		if reference, ok := object.(*Reference); ok {
+			return reference, nil
+		}
+		return nil, NewError("Expected Reference")
+	}
+	return nil, NewError("Dictionary does not contain key: %s", key)
+}
+
 func (d Dictionary) GetString(key string) (string, error) {
 	object, err := d.GetObject(key)
 	if err != nil {

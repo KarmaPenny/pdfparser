@@ -43,8 +43,7 @@ func DecodeStream(filter string, data []byte, decode_parms Dictionary) ([]byte, 
 	}
 
 	// filter is not supported
-	Debug("%s filter not supported", filter)
-	return data, NewError("Unsupported")
+	return data, NewError("Unsupported Filter: %s", filter)
 }
 
 func ASCIIHexDecode(data []byte) ([]byte, error) {

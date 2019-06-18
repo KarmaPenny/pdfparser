@@ -1,4 +1,4 @@
-package pdf
+package logger
 
 import (
 	"fmt"
@@ -17,5 +17,13 @@ func Debug(format string, a ...interface{}) {
 		} else {
 			fmt.Fprintln(LogWriter, format)
 		}
+	}
+}
+
+func Error(format string, a ...interface{}) {
+	if len(a) > 0 {
+		fmt.Fprintln(LogWriter, fmt.Sprintf(format, a...))
+	} else {
+		fmt.Fprintln(LogWriter, format)
 	}
 }

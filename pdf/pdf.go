@@ -3,8 +3,12 @@ package pdf
 import (
 	"bufio"
 	"bytes"
+	"fmt"
+	"github.com/KarmaPenny/pdfparser/logger"
 	"io"
+	"io/ioutil"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -27,22 +31,27 @@ type Pdf struct {
 	whitelisted_objects map[int]interface{}
 }
 
-func Open(path string, password string) (*Pdf, error) {
-	file, err := os.Open(path)
+func Open(file_path string, password string) (*Pdf, error) {
+	file, err := os.Open(file_path)
 	if err != nil {
 		return nil, err
 	}
 	pdf := &Pdf{bufio.NewReader(file), file, map[int]*XrefEntry{}, map[int64]interface{}{}, Dictionary{}, []byte{}, nil, map[int]interface{}{}}
 
 	// find the start xref offset and load the xref
+	logger.Debug("reading startxref")
 	if start_xref_offset, err := pdf.getStartXrefOffset(); err == nil {
+		logger.Debug("loading xref at %d", start_xref_offset)
 		if err = pdf.loadXref(start_xref_offset); err == nil {
+			logger.Debug("validating xref")
 			if err = pdf.IsXrefValid(); err == nil {
 				if encrypt, ok := pdf.trailer["Encrypt"]; ok {
+					logger.Debug("pdf is encrypted")
 					if ref, ok := encrypt.(*Reference); ok {
 						pdf.whitelisted_objects[ref.Number] = nil
 					}
 					if !pdf.SetPassword(password) {
+						logger.Error("incorrect password")
 						pdf.Close()
 						return pdf, ErrorPassword
 					}
@@ -123,16 +132,18 @@ func (pdf *Pdf) loadXref(offset int64) error {
 	}
 	pdf.xref_offsets[offset] = nil
 
-	// start tokenizing at offset
-	pdf.Seek(offset, io.SeekStart)
-
 	// if xref is a stream
-	if n, err := pdf.readInt(); err == nil {
+	pdf.Seek(offset, io.SeekStart)
+	if n, _, err := pdf.readObjectHeader(); err == nil {
+		// dont decrypt xref streams
 		pdf.whitelisted_objects[n] = nil
+
+		// read the xref object
 		return pdf.readXrefStream()
 	}
 
 	// if xref is a table
+	pdf.Seek(offset, io.SeekStart)
 	if keyword, err := pdf.readKeyword(); err == nil && keyword == KEYWORD_XREF {
 		return pdf.readXrefTable()
 	}
@@ -142,6 +153,7 @@ func (pdf *Pdf) loadXref(offset int64) error {
 
 // readXrefTable reads an xref table into pdf.Xref
 func (pdf *Pdf) readXrefTable() error {
+
 	// scan until end of xref table is reached
 	for {
 		// get subsection start
@@ -217,14 +229,6 @@ func (pdf *Pdf) readXrefTable() error {
 
 // readXrefStream reads an xref stream object into pdf.Xref
 func (pdf *Pdf) readXrefStream() error {
-	// skip object generation and start marker
-	if _, err := pdf.readInt(); err != nil {
-		return err
-	}
-	if keyword, err := pdf.readKeyword(); err != nil || keyword != KEYWORD_OBJ {
-		return NewError("Expected obj keyword")
-	}
-
 	// get the stream dictionary which is also the trailer dictionary
 	trailer, err := pdf.readDictionary(noFilter)
 	if err != nil {
@@ -345,7 +349,7 @@ func (pdf *Pdf) IsXrefValid() error {
 
 // RepairXref attempts to rebuild the xref table by locating all obj start markers in the pdf file
 func (pdf *Pdf) RepairXref() error {
-	Debug("repairing xref")
+	logger.Debug("repairing xref")
 
 	// clear the xref
 	pdf.Xref = map[int]*XrefEntry{}
@@ -380,45 +384,40 @@ func (pdf *Pdf) RepairXref() error {
 		offset = pdf.Seek(offset + int64(index[1]), io.SeekStart)
 	}
 
-	Debug("repaired")
-	Debug("loaded %d xref entries", len(pdf.Xref))
+	logger.Debug("loaded %d xref entries", len(pdf.Xref))
 	return nil
 }
 
 func (pdf *Pdf) ReadObject(number int) *IndirectObject {
-	Debug("Reading object %d", number)
+	logger.Debug("Reading object %d", number)
 
-	// create a new indirect object
 	object := NewIndirectObject(number)
 
 	if xref_entry, ok := pdf.Xref[number]; ok {
-		// set the generation number
-		object.Generation = xref_entry.Generation
-
-		// if object is in use
 		if xref_entry.Type == XrefTypeIndirectObject {
+			// set generation number
+			object.Generation = xref_entry.Generation
+
 			// seek to start of object
 			pdf.Seek(xref_entry.Offset, io.SeekStart)
 
-			// skip object number, generation and start marker
-			pdf.readInt()
-			pdf.readInt()
-			pdf.readKeyword()
+			// skip object header
+			pdf.readObjectHeader()
 
 			// initialize string decryption filter
 			var string_filter CryptFilter = noFilter
 			if pdf.security_handler != nil {
 				string_filter = pdf.security_handler.string_filter
 			}
-			string_filter = string_filter.Init(number, xref_entry.Generation)
+			string_filter = string_filter.Init(number, object.Generation)
 
 			// get the value of the object
-			Debug("Reading object value")
+			logger.Debug("Reading object value")
 			object.Value, _ = pdf.readObject(string_filter)
 
 			// get next keyword
 			if keyword, err := pdf.readKeyword(); err == nil && keyword == KEYWORD_STREAM {
-				Debug("Reading object stream")
+				logger.Debug("Reading object stream")
 				// get stream dictionary
 				d, ok := object.Value.(Dictionary)
 				if !ok {
@@ -426,13 +425,77 @@ func (pdf *Pdf) ReadObject(number int) *IndirectObject {
 				}
 
 				// read the stream
-				object.Stream = pdf.readStream(number, xref_entry.Generation, d)
+				object.Stream = pdf.readStream(number, object.Generation, d)
 			}
 		}
 	}
 
-	Debug("Done")
 	return object
+}
+
+func (pdf *Pdf) ExtractFiles(extract_dir string) {
+	root, _ := pdf.trailer.GetDictionary("Root")
+	names, _ := root.GetDictionary("Names")
+	embedded_files, _ := names.GetDictionary("EmbeddedFiles")
+	pdf.extractFiles(embedded_files, extract_dir, map[int]interface{}{})
+}
+
+func (pdf *Pdf) extractFiles(d Dictionary, extract_dir string, resolved_kids map[int]interface{}) {
+	kids, _ := d.GetArray("Kids")
+	for i := range kids {
+		// prevent infinite resolve reference loop
+		if r, ok := kids[i].(*Reference); ok {
+			if _, resolved := resolved_kids[r.Number]; resolved {
+				continue
+			}
+			resolved_kids[r.Number] = nil
+		}
+
+		kid, _ := kids.GetDictionary(i)
+		pdf.extractFiles(kid, extract_dir, resolved_kids)
+	}
+
+	names, _ := d.GetArray("Names")
+	for i := 1; i < len(names); i += 2 {
+		file_specification, _ := names.GetDictionary(i)
+		file_name, err := file_specification.GetString("F")
+		if err != nil {
+			file_name = "unknown"
+		}
+		ef, _ := file_specification.GetDictionary("EF")
+		if ef_ref, err := ef.GetReference("F"); err == nil {
+			obj := pdf.ReadObject(ef_ref.Number)
+			base_name := path.Base(file_name)
+			file_name := path.Join(extract_dir, base_name)
+			for counter := 1; true; counter++ {
+				if _, err = os.Stat(file_name); err != nil {
+					break
+				}
+				file_name = path.Join(extract_dir, fmt.Sprintf("%d_%s", counter, base_name))
+			}
+			ioutil.WriteFile(file_name, obj.Stream, 0644)
+		}
+	}
+}
+
+func (pdf *Pdf) readObjectHeader() (int, int, error) {
+	// read object number
+	number, err := pdf.readInt()
+	if err != nil {
+		return number, 0, err
+	}
+
+	// read object generation
+	generation, err := pdf.readInt()
+	if err != nil {
+		return number, generation, err
+	}
+
+	// read object start marker
+	if keyword, err := pdf.readKeyword(); err != nil || keyword != KEYWORD_OBJ {
+		return number, generation, NewError("Expected obj keyword")
+	}
+	return number, generation, nil
 }
 
 func (pdf *Pdf) readStream(n int, g int, d Dictionary) []byte {
@@ -564,7 +627,7 @@ func (pdf *Pdf) readStream(n int, g int, d Dictionary) []byte {
 		stream_data_bytes, err = DecodeStream(filter, stream_data_bytes, decode_parms)
 		if err != nil {
 			// stop when decode error enountered
-			Debug("failed to decode stream: %s", err)
+			logger.Debug("failed to decode stream: %s", err)
 			return stream_data_bytes
 		}
 	}
