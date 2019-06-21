@@ -241,7 +241,7 @@ func (pdf *Pdf) LoadXref(offset int64, offsets map[int64]interface{}) error {
 
 	// if xref is a table
 	pdf.Seek(offset, io.SeekStart)
-	if keyword, err := pdf.ReadKeyword(); err == nil && keyword == KEYWORD_XREF {
+	if keyword := pdf.ReadKeyword(); keyword == KEYWORD_XREF {
 		return pdf.LoadXrefTable(offsets)
 	}
 
@@ -267,7 +267,7 @@ func (pdf *Pdf) LoadXrefTable(offsets map[int64]interface{}) error {
 		subsection_start, err := pdf.ReadInt()
 		if err != nil {
 			// we are at the trailer
-			if keyword, err := pdf.ReadKeyword(); err == nil && keyword == KEYWORD_TRAILER {
+			if keyword := pdf.ReadKeyword(); keyword == KEYWORD_TRAILER {
 				break
 			}
 			return NewError("Expected int or trailer keyword")
@@ -294,10 +294,7 @@ func (pdf *Pdf) LoadXrefTable(offsets map[int64]interface{}) error {
 			}
 
 			// find xref entry in use flag
-			flag, err := pdf.ReadKeyword()
-			if err != nil {
-				return err
-			}
+			flag := pdf.ReadKeyword()
 			xref_type := XrefTypeFreeObject
 			if flag == KEYWORD_N {
 				xref_type = XrefTypeIndirectObject
@@ -555,7 +552,7 @@ func (pdf *Pdf) GetObject(number int) *IndirectObject {
 			object.Value, _ = pdf.ReadObject(string_decryptor)
 
 			// get next keyword
-			if keyword, err := pdf.ReadKeyword(); err == nil && keyword == KEYWORD_STREAM {
+			if keyword := pdf.ReadKeyword(); keyword == KEYWORD_STREAM {
 				logger.Debug("Reading object stream")
 				// get stream dictionary
 				d, ok := object.Value.(Dictionary)
@@ -651,7 +648,7 @@ func (pdf *Pdf) ReadObjectHeader() (int, int, error) {
 	}
 
 	// read object start marker
-	if keyword, err := pdf.ReadKeyword(); err != nil || keyword != KEYWORD_OBJ {
+	if keyword := pdf.ReadKeyword(); keyword != KEYWORD_OBJ {
 		return number, generation, NewError("Expected obj keyword")
 	}
 	return number, generation, nil
@@ -702,7 +699,7 @@ func (pdf *Pdf) ReadObject(decryptor Decryptor) (Object, error) {
 
 	// handle keywords
 	if (b[0] >= 'a' && b[0] <= 'z') || b[0] == 'R' {
-		return pdf.ReadKeyword()
+		return pdf.ReadKeyword(), nil
 	}
 
 	// handle numbers and references
@@ -723,7 +720,7 @@ func (pdf *Pdf) ReadObject(decryptor Decryptor) (Object, error) {
 		}
 
 		// if not a reference then revert to saved offset and return the number
-		if keyword, err := pdf.ReadKeyword(); err != nil || keyword != KEYWORD_R {
+		if keyword := pdf.ReadKeyword(); keyword != KEYWORD_R {
 			pdf.Seek(offset, io.SeekStart)
 			return number, nil
 		}
@@ -892,7 +889,7 @@ func (pdf *Pdf) ReadInt64() (int64, error) {
 	return value, nil
 }
 
-func (pdf *Pdf) ReadKeyword() (Keyword, error) {
+func (pdf *Pdf) ReadKeyword() Keyword {
 	// consume any leading whitespace/comments
 	pdf.consumeWhitespace()
 
