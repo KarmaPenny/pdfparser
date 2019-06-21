@@ -113,9 +113,19 @@ func (d Dictionary) GetReference(key string) (*Reference, error) {
 		if reference, ok := object.(*Reference); ok {
 			return reference, nil
 		}
-		return nil, NewError("Expected Reference")
+		return nil, NewError("Expected reference")
 	}
 	return nil, NewError("Dictionary does not contain key: %s", key)
+}
+
+func (d Dictionary) GetStream(key string) ([]byte, error) {
+	if object, ok := d[key]; ok {
+		if reference, ok := object.(*Reference); ok {
+			return reference.ResolveStream(), nil
+		}
+		return []byte{}, NewError("Expected reference")
+	}
+	return []byte{}, NewError("Dictionary does not contain key: %s", key)
 }
 
 func (d Dictionary) GetString(key string) (string, error) {

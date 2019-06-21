@@ -29,19 +29,33 @@ func (reference *Reference) Resolve() Object {
 	// revert offset
 	reference.pdf.Seek(current_offset, io.SeekStart)
 
-	// return the object
-	return object
+	// return the resolved object value
+	return object.Value
 }
 
-func (reference *Reference) resolve(resolved_references map[int]interface{}) Object {
+func (reference *Reference) ResolveStream() []byte {
+	// save current offset so we can come back
+	current_offset := reference.pdf.CurrentOffset()
+
+	// resolve the referenced object value
+	object := reference.resolve(map[int]interface{}{})
+
+	// revert offset
+	reference.pdf.Seek(current_offset, io.SeekStart)
+
+	// return the resolved object value
+	return object.Stream
+}
+
+func (reference *Reference) resolve(resolved_references map[int]interface{}) *IndirectObject {
 	// prevent infinite loop
 	if _, ok := resolved_references[reference.Number]; ok {
-		return KEYWORD_NULL
+		return NewIndirectObject(reference.Number)
 	}
 	resolved_references[reference.Number] = nil
 
 	// read the object from the pdf
-	object := reference.pdf.ReadObject(reference.Number)
+	object := reference.pdf.GetObject(reference.Number)
 
 	// recursively resolve references
 	if ref, ok := object.Value.(*Reference); ok {
@@ -49,5 +63,5 @@ func (reference *Reference) resolve(resolved_references map[int]interface{}) Obj
 	}
 
 	// return the object
-	return object.Value
+	return object
 }

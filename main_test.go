@@ -2,30 +2,35 @@ package main
 
 import (
 	"github.com/KarmaPenny/pdfparser/pdf"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 )
 
-// openTestPdf returns a loaded PDF for the provided pdf_name in the test directory
-func openTestPdf(pdf_name string) (*pdf.Pdf, error) {
+func openTestPdf(pdf_name string) (*os.File, error) {
 	_, test_path, _, _ := runtime.Caller(0)
 	test_dir := filepath.Dir(test_path)
-	path := filepath.Join(test_dir, "test", pdf_name)
-	return pdf.Open(path, "")
+	return os.Open(filepath.Join(test_dir, "test", pdf_name))
 }
 
 func TestComments(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("comments.pdf")
+	f, err := openTestPdf("comments.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read the object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// assert value is correct
 	if object.Value.String() != "(%this is not a comment)" {
@@ -35,14 +40,20 @@ func TestComments(test *testing.T) {
 
 func TestEmptyArray(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("empty_array.pdf")
+	f, err := openTestPdf("empty_array.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read the object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// assert value is correct
 	if object.Value.String() != "[]" {
@@ -52,14 +63,20 @@ func TestEmptyArray(test *testing.T) {
 
 func TestEmptyDictionary(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("empty_dictionary.pdf")
+	f, err := openTestPdf("empty_dictionary.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read the object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// assert value is correct
 	if object.Value.String() != "<<>>" {
@@ -69,14 +86,20 @@ func TestEmptyDictionary(test *testing.T) {
 
 func TestEncrypted(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("encrypted.pdf")
+	f, err := openTestPdf("encrypted.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// test string decryption
-	object := PDF.ReadObject(12)
+	object := PDF.GetObject(12)
 	d12, ok := object.Value.(pdf.Dictionary)
 	if !ok {
 		test.Fatalf("expected dictionary")
@@ -86,7 +109,7 @@ func TestEncrypted(test *testing.T) {
 	}
 
 	// test stream decryption
-	object = PDF.ReadObject(8)
+	object = PDF.GetObject(8)
 	if string(object.Stream[:8]) != "/CIDInit" {
 		test.Fatalf("incorrect value %s", string(object.Stream[:8]))
 	}
@@ -94,14 +117,20 @@ func TestEncrypted(test *testing.T) {
 
 func TestFilterASCII85Decode(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("filter_ascii_85_decode.pdf")
+	f, err := openTestPdf("filter_ascii_85_decode.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read the object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// assert value is correct
 	if string(object.Stream) != "\x00\x00\x00\x00%!FontType" {
@@ -111,14 +140,20 @@ func TestFilterASCII85Decode(test *testing.T) {
 
 func TestFilterASCIIHexDecode(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("filter_ascii_hex_decode.pdf")
+	f, err := openTestPdf("filter_ascii_hex_decode.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read the object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// assert value is correct
 	if string(object.Stream) != "Hellop" {
@@ -128,14 +163,20 @@ func TestFilterASCIIHexDecode(test *testing.T) {
 
 func TestFilterFlateDecode(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("filter_flate_decode.pdf")
+	f, err := openTestPdf("filter_flate_decode.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read the object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// assert value is correct
 	if string(object.Stream) != "hello world\nhello world\nhello world\nhello world\nhello world\n" {
@@ -145,14 +186,20 @@ func TestFilterFlateDecode(test *testing.T) {
 
 func TestFilterLZWDecode(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("filter_lzw_decode.pdf")
+	f, err := openTestPdf("filter_lzw_decode.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read the object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// assert value is correct
 	if string(object.Stream) != "hello world!" {
@@ -162,14 +209,20 @@ func TestFilterLZWDecode(test *testing.T) {
 
 func TestFilterLZWTiffDecode(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("filter_lzw_tiff_decode.pdf")
+	f, err := openTestPdf("filter_lzw_tiff_decode.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read the object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// assert value is correct
 	if string(object.Stream) != "hello world!" {
@@ -179,14 +232,20 @@ func TestFilterLZWTiffDecode(test *testing.T) {
 
 func TestFilterMultiple(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("filter_multiple.pdf")
+	f, err := openTestPdf("filter_multiple.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read the object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// assert value is correct
 	if string(object.Stream) != "hello world\nhello world\nhello world\nhello world\nhello world\n" {
@@ -196,14 +255,20 @@ func TestFilterMultiple(test *testing.T) {
 
 func TestFilterRunLengthDecode(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("filter_run_length_decode.pdf")
+	f, err := openTestPdf("filter_run_length_decode.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read the object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// assert value is correct
 	if string(object.Stream) != "Hello" {
@@ -213,14 +278,20 @@ func TestFilterRunLengthDecode(test *testing.T) {
 
 func TestMalformedDictionaryKey(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("malformed_dictionary_key.pdf")
+	f, err := openTestPdf("malformed_dictionary_key.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// assert value is correct
 	if object.Value.String() != "<</MalformedReference 45/HiddenObject (Hello World)>>" {
@@ -230,14 +301,20 @@ func TestMalformedDictionaryKey(test *testing.T) {
 
 func TestNames(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("names.pdf")
+	f, err := openTestPdf("names.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// assert value is correct
 	if object.Value.String() != "/Hello /World!\x00qz" {
@@ -247,14 +324,20 @@ func TestNames(test *testing.T) {
 
 func TestReference(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("reference.pdf")
+	f, err := openTestPdf("reference.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// make sure object is a reference
 	reference, ok := object.Value.(*pdf.Reference)
@@ -281,14 +364,20 @@ func TestReferenceLoop(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("reference_loop.pdf")
+		f, err := openTestPdf("reference_loop.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// read object
-		object := PDF.ReadObject(1)
+		object := PDF.GetObject(1)
 
 		// make sure object is a reference
 		reference, ok := object.Value.(*pdf.Reference)
@@ -315,14 +404,20 @@ func TestReferenceLoop(test *testing.T) {
 
 func TestReferenceNull(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("reference_null.pdf")
+	f, err := openTestPdf("reference_null.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// make sure object is a reference
 	reference, ok := object.Value.(*pdf.Reference)
@@ -341,14 +436,20 @@ func TestReferenceNull(test *testing.T) {
 
 func TestStreamCarriageReturn(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("stream_carriage_return.pdf")
+	f, err := openTestPdf("stream_carriage_return.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read the object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// assert value is correct
 	if string(object.Stream) != "Hello" {
@@ -358,14 +459,20 @@ func TestStreamCarriageReturn(test *testing.T) {
 
 func TestStrings(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("strings.pdf")
+	f, err := openTestPdf("strings.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// read the object
-	object := PDF.ReadObject(1)
+	object := PDF.GetObject(1)
 
 	// make sure object is an array
 	array, ok := object.Value.(pdf.Array)
@@ -398,14 +505,20 @@ func TestUnclosedArray(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("unclosed_array.pdf")
+		f, err := openTestPdf("unclosed_array.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// read the object
-		object := PDF.ReadObject(1)
+		object := PDF.GetObject(1)
 
 		// make sure object value is correct
 		if object.Value.String() != "[]" {
@@ -431,14 +544,20 @@ func TestUnclosedComment(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("unclosed_comment.pdf")
+		f, err := openTestPdf("unclosed_comment.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// read the object
-		object := PDF.ReadObject(1)
+		object := PDF.GetObject(1)
 
 		// make sure object value is correct
 		if object.Value.String() != "null" {
@@ -464,14 +583,20 @@ func TestUnclosedDictionary(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("unclosed_dictionary.pdf")
+		f, err := openTestPdf("unclosed_dictionary.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// read the object
-		object := PDF.ReadObject(1)
+		object := PDF.GetObject(1)
 
 		// make sure object value is correct
 		if object.Value.String() != "<<>>" {
@@ -496,14 +621,20 @@ func TestUnclosedDictionaryKey(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("unclosed_dictionary_key.pdf")
+		f, err := openTestPdf("unclosed_dictionary_key.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// read the object
-		object := PDF.ReadObject(1)
+		object := PDF.GetObject(1)
 
 		// make sure object value is correct
 		if object.Value.String() != "<</Size null>>" {
@@ -529,14 +660,20 @@ func TestUnclosedHexString(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("unclosed_hex_string.pdf")
+		f, err := openTestPdf("unclosed_hex_string.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// read the object
-		object := PDF.ReadObject(1)
+		object := PDF.GetObject(1)
 
 		// make sure object value is correct
 		if object.Value.String() != "()" {
@@ -562,14 +699,20 @@ func TestUnclosedName(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("unclosed_name.pdf")
+		f, err := openTestPdf("unclosed_name.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// read the object
-		object := PDF.ReadObject(1)
+		object := PDF.GetObject(1)
 
 		// make sure object value is correct
 		if object.Value.String() != "/" {
@@ -595,14 +738,20 @@ func TestUnclosedNameEscape1(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("unclosed_name_escape_1.pdf")
+		f, err := openTestPdf("unclosed_name_escape_1.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// read the object
-		object := PDF.ReadObject(1)
+		object := PDF.GetObject(1)
 
 		// make sure object value is correct
 		if object.Value.String() != "/\x00" {
@@ -628,14 +777,20 @@ func TestUnclosedNameEscape2(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("unclosed_name_escape_2.pdf")
+		f, err := openTestPdf("unclosed_name_escape_2.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// read the object
-		object := PDF.ReadObject(1)
+		object := PDF.GetObject(1)
 
 		// make sure object value is correct
 		if object.Value.String() != "/0" {
@@ -661,14 +816,20 @@ func TestUnclosedString(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("unclosed_string.pdf")
+		f, err := openTestPdf("unclosed_string.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// read the object
-		object := PDF.ReadObject(1)
+		object := PDF.GetObject(1)
 
 		// make sure object value is correct
 		if object.Value.String() != "()" {
@@ -694,14 +855,20 @@ func TestUnclosedStringEscape(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("unclosed_string_escape.pdf")
+		f, err := openTestPdf("unclosed_string_escape.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// read the object
-		object := PDF.ReadObject(1)
+		object := PDF.GetObject(1)
 
 		// make sure object value is correct
 		if object.Value.String() != "(\\)" {
@@ -727,14 +894,20 @@ func TestUnclosedStringOctal1(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("unclosed_string_octal_1.pdf")
+		f, err := openTestPdf("unclosed_string_octal_1.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// read the object
-		object := PDF.ReadObject(1)
+		object := PDF.GetObject(1)
 
 		// make sure object value is correct
 		if object.Value.String() != "(\x01)" {
@@ -760,14 +933,20 @@ func TestUnclosedStringOctal2(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("unclosed_string_octal_2.pdf")
+		f, err := openTestPdf("unclosed_string_octal_2.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// read the object
-		object := PDF.ReadObject(1)
+		object := PDF.GetObject(1)
 
 		// make sure object value is correct
 		if object.Value.String() != "(\n)" {
@@ -793,11 +972,17 @@ func TestXrefLoop(test *testing.T) {
 		defer func() {done <- true}()
 
 		// open the pdf
-		PDF, err := openTestPdf("xref_loop.pdf")
+		f, err := openTestPdf("xref_loop.pdf")
 		if err != nil {
 			test.Fatal(err)
 		}
-		defer PDF.Close()
+		defer f.Close()
+
+		// load the pdf
+		PDF, err := pdf.Load(f, "")
+		if err != nil {
+			test.Fatal(err)
+		}
 
 		// assert xref length is correct
 		if len(PDF.Xref) != 10 {
@@ -815,11 +1000,17 @@ func TestXrefLoop(test *testing.T) {
 
 func TestXrefRepair(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("xref_repair.pdf")
+	f, err := openTestPdf("xref_repair.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// assert xref length is correct
 	if len(PDF.Xref) != 9 {
@@ -827,7 +1018,7 @@ func TestXrefRepair(test *testing.T) {
 	}
 
 	// read the object
-	object := PDF.ReadObject(9)
+	object := PDF.GetObject(9)
 
 	// assert values are correct
 	if object.Value.String() != "(Hello world)" {
@@ -837,11 +1028,17 @@ func TestXrefRepair(test *testing.T) {
 
 func TestXrefStreamChain(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("xref_stream_chain.pdf")
+	f, err := openTestPdf("xref_stream_chain.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// assert xref length is correct
 	if len(PDF.Xref) != 11 {
@@ -849,7 +1046,7 @@ func TestXrefStreamChain(test *testing.T) {
 	}
 
 	// read the object
-	object := PDF.ReadObject(10)
+	object := PDF.GetObject(10)
 
 	// assert values are correct
 	if object.Value.String() != "(Hello World!)" {
@@ -859,11 +1056,17 @@ func TestXrefStreamChain(test *testing.T) {
 
 func TestXrefStreamIndexDefault(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("xref_stream_index_default.pdf")
+	f, err := openTestPdf("xref_stream_index_default.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// assert xref length is correct
 	if len(PDF.Xref) != 10 {
@@ -871,7 +1074,7 @@ func TestXrefStreamIndexDefault(test *testing.T) {
 	}
 
 	// read the object
-	object := PDF.ReadObject(9)
+	object := PDF.GetObject(9)
 
 	// assert values are correct
 	if object.Value.String() != "(Hello World!)" {
@@ -881,11 +1084,17 @@ func TestXrefStreamIndexDefault(test *testing.T) {
 
 func TestXrefTableChain(test *testing.T) {
 	// open the pdf
-	PDF, err := openTestPdf("xref_table_chain.pdf")
+	f, err := openTestPdf("xref_table_chain.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}
-	defer PDF.Close()
+	defer f.Close()
+
+	// load the pdf
+	PDF, err := pdf.Load(f, "")
+	if err != nil {
+		test.Fatal(err)
+	}
 
 	// assert xref length is correct
 	if len(PDF.Xref) != 10 {

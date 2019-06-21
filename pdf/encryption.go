@@ -10,20 +10,27 @@ import (
 
 var padding_string []byte = []byte("\x28\xBF\x4E\x5E\x4E\x75\x8A\x41\x64\x00\x4E\x56\xFF\xFA\x01\x08\x2E\x2E\x00\xB6\xD0\x68\x3E\x80\x2F\x0C\xA9\xFE\x64\x53\x69\x7A")
 var noFilter = &CryptFilterNone{}
+var noDecryptor = &DecryptorNone{}
+var defaultSecurityHandler = &SecurityHandler{0, 0, 0, nil, nil, nil, true, nil, noFilter, noFilter, noFilter, map[string]CryptFilter{}, nil}
 
 type CryptFilter interface {
-	Init(int, int) CryptFilter
+	NewDecryptor(int, int) Decryptor
+}
+
+type Decryptor interface {
 	Decrypt([]byte) []byte
 }
 
 // No encryption
 type CryptFilterNone struct {}
 
-func (c *CryptFilterNone) Init(n int, g int) CryptFilter {
-	return c
+func (c *CryptFilterNone) NewDecryptor(n int, g int) Decryptor {
+	return &DecryptorNone{}
 }
 
-func (c *CryptFilterNone) Decrypt(data []byte) []byte {
+type DecryptorNone struct {}
+
+func (d *DecryptorNone) Decrypt(data []byte) []byte {
 	return data
 }
 
@@ -32,7 +39,7 @@ type CryptFilterAES struct {
 	encryption_key []byte
 }
 
-func (c *CryptFilterAES) Init(n int, g int) CryptFilter {
+func (c *CryptFilterAES) NewDecryptor(n int, g int) Decryptor {
 	// allocate space for salt and copy encryption key into it
 	salt := make([]byte, len(c.encryption_key), len(c.encryption_key) + 9)
 	copy(salt, c.encryption_key)
@@ -63,11 +70,15 @@ func (c *CryptFilterAES) Init(n int, g int) CryptFilter {
 	key = key[:l]
 
 	// return new crypt filter with salted key
-	return &CryptFilterAES{key}
+	return &DecryptorAES{key}
 }
 
-func (c *CryptFilterAES) Decrypt(data []byte) []byte {
-	block, _ := aes.NewCipher(c.encryption_key)
+type DecryptorAES struct {
+	encryption_key []byte
+}
+
+func (d *DecryptorAES) Decrypt(data []byte) []byte {
+	block, _ := aes.NewCipher(d.encryption_key)
 
 	// no data to decrypt, first block is initialization vector
 	if len(data) <= aes.BlockSize {
@@ -87,7 +98,7 @@ type CryptFilterRC4 struct {
 	encryption_key []byte
 }
 
-func (c *CryptFilterRC4) Init(n int, g int) CryptFilter {
+func (c *CryptFilterRC4) NewDecryptor(n int, g int) Decryptor {
 	// allocate space for salt and copy encryption key into it
 	salt := make([]byte, len(c.encryption_key), len(c.encryption_key) + 5)
 	copy(salt, c.encryption_key)
@@ -115,11 +126,15 @@ func (c *CryptFilterRC4) Init(n int, g int) CryptFilter {
 	key = key[:l]
 
 	// return new crypt filter with salted key
-	return &CryptFilterRC4{key}
+	return &DecryptorRC4{key}
 }
 
-func (c *CryptFilterRC4) Decrypt(data []byte) []byte {
-	cipher, _ := rc4.NewCipher(c.encryption_key)
+type DecryptorRC4 struct {
+	encryption_key []byte
+}
+
+func (d *DecryptorRC4) Decrypt(data []byte) []byte {
+	cipher, _ := rc4.NewCipher(d.encryption_key)
 	cipher.XORKeyStream(data, data)
 	return data
 }

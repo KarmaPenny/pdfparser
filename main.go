@@ -15,22 +15,12 @@ func main() {
 	// parse cmd args
 	parse_args()
 
-	// open the pdf
-	PDF, err := pdf.Open(flag.Arg(0), *password)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return
-	}
-	defer PDF.Close()
+	// create output dir
+	os.RemoveAll(*extract_dir)
+	os.MkdirAll(*extract_dir, 0755)
 
-	// print all indirect objects in xref
-	for n, entry := range PDF.Xref {
-		if entry.Type == pdf.XrefTypeIndirectObject {
-			fmt.Println(PDF.ReadObject(n))
-		}
-	}
-
-	PDF.ExtractFiles(*extract_dir)
+	// parse the pdf
+	pdf.Parse(flag.Arg(0), *password, *extract_dir)
 }
 
 // parse cmd args
@@ -47,8 +37,6 @@ func parse_args() {
 	if *extract_dir == "" {
 		*extract_dir = flag.Arg(0) + ".extracted"
 	}
-	//os.RemoveAll(*extract_dir)
-	os.Mkdir(*extract_dir, 0755)
 }
 
 // print help info
