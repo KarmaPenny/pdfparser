@@ -54,3 +54,12 @@ func SetBits(d []byte, p int, n int, v uint32) {
 		d[p / 8 + i] = byte(dv >> (32 - ((uint(i) + 1) * 8)))
 	}
 }
+
+func BytesToInt16(b []byte) int16 {
+	val := int16(0)
+	for i := range b {
+		val *= 256
+		val += int16(b[i])
+	}
+	return val
+}

@@ -22,18 +22,6 @@ var xref_regexp = regexp.MustCompile(`xref`)
 var whitespace = []byte("\x00\t\n\f\r ")
 var delimiters = []byte("()<>[]/%")
 
-type Parser struct {
-	*bufio.Reader
-	seeker io.ReadSeeker
-	Xref map[int]*XrefEntry
-	trailer Dictionary
-	security_handler *SecurityHandler
-}
-
-func NewParser(readSeeker io.ReadSeeker) *Parser {
-	return &Parser{bufio.NewReader(readSeeker), readSeeker, map[int]*XrefEntry{}, Dictionary{}, defaultSecurityHandler}
-}
-
 func Parse(file_path string, password string, output_dir string) error {
 	// open the pdf
 	file, err := os.Open(file_path)
@@ -42,17 +30,19 @@ func Parse(file_path string, password string, output_dir string) error {
 	}
 	defer file.Close()
 
+	// create a new parser
+	parser := NewParser(file)
+
 	// load the pdf
-	parser, err := Load(file, password)
-	if err != nil {
+	if err := parser.Load(password); err != nil {
 		return err
 	}
 
 	// extract embedded files
 	parser.ExtractFiles(output_dir)
 
-	// TODO: extract text
-	//parser.ExtractText(output_dir)
+	// extract text
+	parser.ExtractText(output_dir)
 
 	// TODO: extract javascript - might have to do this during dictionary parsing
 
@@ -77,10 +67,19 @@ func Parse(file_path string, password string, output_dir string) error {
 	return nil
 }
 
-func Load(file io.ReadSeeker, password string) (*Parser, error) {
-	// create new pdf object
-	parser := NewParser(file)
+type Parser struct {
+	*bufio.Reader
+	seeker io.ReadSeeker
+	Xref map[int]*XrefEntry
+	trailer Dictionary
+	security_handler *SecurityHandler
+}
 
+func NewParser(readSeeker io.ReadSeeker) *Parser {
+	return &Parser{bufio.NewReader(readSeeker), readSeeker, map[int]*XrefEntry{}, Dictionary{}, defaultSecurityHandler}
+}
+
+func (parser *Parser) Load(password string) error {
 	// find location of all xref tables
 	logger.Debug("finding xref offsets")
 	xref_offsets := parser.FindXrefOffsets()
@@ -129,11 +128,11 @@ func Load(file io.ReadSeeker, password string) (*Parser, error) {
 		// set the password
 		if !parser.SetPassword(password) {
 			logger.Debug("incorrect password")
-			return parser, ErrorPassword
+			return ErrorPassword
 		}
 	}
 
-	return parser, nil
+	return nil
 }
 
 // FindXrefOffsets locates all xref tables
@@ -459,9 +458,59 @@ func (parser *Parser) extractText(d Dictionary, resolved_kids map[int]interface{
 		font_map[font] = NewFont(cmap)
 	}
 
+	// get contents
 	contents, _ := d.GetStream("Contents")
-	// TODO: decode text
-	fmt.Fprintln(text_file, string(contents))
+
+	// create parser for parsing contents
+	contents_parser := NewParser(bytes.NewReader(contents))
+
+	// parse text
+	for {
+		// read next command
+		command, _, err := contents_parser.ReadCommand()
+		if err == ErrorRead {
+			break
+		}
+
+		// start of text block
+		if command == KEYWORD_TEXT {
+			// initial font is none
+			current_font := FontDefault
+
+			for {
+				command, operands, err := contents_parser.ReadCommand()
+				// stop if end of stream or end of text block
+				if err == ErrorRead || command == KEYWORD_TEXT_END {
+					break
+				}
+
+				// handle font changes
+				if command == KEYWORD_TEXT_FONT {
+					font_name, _ := operands.GetName(len(operands) - 2)
+					if font, ok := font_map[font_name]; ok {
+						current_font = font
+					} else {
+						current_font = FontDefault
+					}
+				} else if command == KEYWORD_TEXT_SHOW_1 || command == KEYWORD_TEXT_SHOW_2 || command == KEYWORD_TEXT_SHOW_3 {
+					// decode text with current font font
+					s, _ := operands.GetString(len(operands) - 1)
+					text_file.WriteString(current_font.Decode([]byte(s)))
+					text_file.WriteString("\n")
+				} else if command == KEYWORD_TEXT_POSITION {
+					// decode positioned text with current font
+					var sb strings.Builder
+					a, _ := operands.GetArray(len(operands) - 1)
+					for i := 0; i < len(a); i += 2 {
+						s, _ := a.GetString(i)
+						sb.WriteString(string(s))
+					}
+					text_file.WriteString(current_font.Decode([]byte(sb.String())))
+					text_file.WriteString("\n")
+				}
+			}
+		}
+	}
 }
 
 func (parser *Parser) ExtractFiles(extract_dir string) error {
@@ -758,6 +807,21 @@ func (parser *Parser) ReadArray(decryptor Decryptor) (Array, error) {
 	return array, nil
 }
 
+func (parser *Parser) ReadCommand() (Keyword, Array, error) {
+	// read in operands until command keyword
+	operands := Array{}
+	for {
+		operand, err := parser.ReadObject(noDecryptor)
+		if err == ErrorRead {
+			return KEYWORD_NULL, operands, err
+		}
+		if keyword, ok := operand.(Keyword); ok {
+			return keyword, operands, nil
+		}
+		operands = append(operands, operand)
+	}
+}
+
 func (parser *Parser) ReadDictionary(decryptor Decryptor) (Dictionary, error) {
 	// consume any leading whitespace/comments
 	parser.consumeWhitespace()
@@ -898,7 +962,7 @@ func (parser *Parser) ReadKeyword() Keyword {
 		}
 
 		// stop if not keyword character
-		if (b < 'a' || b >'z') && b != 'R' {
+		if bytes.IndexByte(whitespace, b) >= 0 || bytes.IndexByte(delimiters, b) >= 0 {
 			parser.UnreadByte()
 			break
 		}
