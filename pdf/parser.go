@@ -22,7 +22,7 @@ var xref_regexp = regexp.MustCompile(`xref`)
 var whitespace = []byte("\x00\t\n\f\r ")
 var delimiters = []byte("()<>[]/%")
 
-type Pdf struct {
+type Parser struct {
 	*bufio.Reader
 	seeker io.ReadSeeker
 	Xref map[int]*XrefEntry
@@ -30,8 +30,8 @@ type Pdf struct {
 	security_handler *SecurityHandler
 }
 
-func NewPdf(readSeeker io.ReadSeeker) *Pdf {
-	return &Pdf{bufio.NewReader(readSeeker), readSeeker, map[int]*XrefEntry{}, Dictionary{}, defaultSecurityHandler}
+func NewParser(readSeeker io.ReadSeeker) *Parser {
+	return &Parser{bufio.NewReader(readSeeker), readSeeker, map[int]*XrefEntry{}, Dictionary{}, defaultSecurityHandler}
 }
 
 func Parse(file_path string, password string, output_dir string) error {
@@ -43,16 +43,16 @@ func Parse(file_path string, password string, output_dir string) error {
 	defer file.Close()
 
 	// load the pdf
-	pdf, err := Load(file, password)
+	parser, err := Load(file, password)
 	if err != nil {
 		return err
 	}
 
 	// extract embedded files
-	pdf.ExtractFiles(output_dir)
+	parser.ExtractFiles(output_dir)
 
 	// TODO: extract text
-	//pdf.ExtractText(output_dir)
+	//parser.ExtractText(output_dir)
 
 	// TODO: extract javascript - might have to do this during dictionary parsing
 
@@ -63,9 +63,9 @@ func Parse(file_path string, password string, output_dir string) error {
 	defer raw_pdf.Close()
 
 	// dump all objects to raw.pdf
-	for object_number, xref_entry := range pdf.Xref {
+	for object_number, xref_entry := range parser.Xref {
 		if xref_entry.Type == XrefTypeIndirectObject {
-			object := pdf.GetObject(object_number)
+			object := parser.GetObject(object_number)
 			fmt.Fprintf(raw_pdf, "%d %d obj\n%s\n", object.Number, object.Generation, object.Value)
 			if object.Stream != nil {
 				fmt.Fprintf(raw_pdf, "stream\n%s\nendstream\n", string(object.Stream))
@@ -77,75 +77,75 @@ func Parse(file_path string, password string, output_dir string) error {
 	return nil
 }
 
-func Load(file io.ReadSeeker, password string) (*Pdf, error) {
+func Load(file io.ReadSeeker, password string) (*Parser, error) {
 	// create new pdf object
-	pdf := NewPdf(file)
+	parser := NewParser(file)
 
 	// find location of all xref tables
 	logger.Debug("finding xref offsets")
-	xref_offsets := pdf.FindXrefOffsets()
+	xref_offsets := parser.FindXrefOffsets()
 
 	// add start xref offset to xref offsets
 	logger.Debug("finding startxref offsets")
-	if start_xref_offset, err := pdf.GetStartXrefOffset(); err == nil {
+	if start_xref_offset, err := parser.GetStartXrefOffset(); err == nil {
 		xref_offsets = append(xref_offsets, start_xref_offset)
 	}
 
 	// load all xrefs
 	logger.Debug("loading xrefs")
 	for i := range xref_offsets {
-		pdf.LoadXref(xref_offsets[i], map[int64]interface{}{})
+		parser.LoadXref(xref_offsets[i], map[int64]interface{}{})
 	}
 
 	// find location of all objects
 	logger.Debug("finding objects")
-	objects := pdf.FindObjects()
+	objects := parser.FindObjects()
 
 	// repair broken and missing xref entries
 	logger.Debug("repairing xrefs")
 	for object_number, object := range objects {
-		if xref_entry, ok := pdf.Xref[object_number]; ok {
+		if xref_entry, ok := parser.Xref[object_number]; ok {
 			// replace xref entry if it does not point to an object or points to the wrong object
-			pdf.Seek(xref_entry.Offset, io.SeekStart)
-			if n, _, err := pdf.ReadObjectHeader(); err != nil || n != object_number {
+			parser.Seek(xref_entry.Offset, io.SeekStart)
+			if n, _, err := parser.ReadObjectHeader(); err != nil || n != object_number {
 				xref_entry.Offset = object.Offset
 			}
 		} else {
 			// add missing object to xref
-			pdf.Xref[object_number] = object
+			parser.Xref[object_number] = object
 		}
 	}
 
 	// setup security handler if pdf is encrypted
-	if encrypt, ok := pdf.trailer["Encrypt"]; ok {
+	if encrypt, ok := parser.trailer["Encrypt"]; ok {
 		logger.Debug("pdf is encrypted")
 		// make sure we don't decrypt the encryption dictionary
 		if ref, ok := encrypt.(*Reference); ok {
-			if xref_entry, ok := pdf.Xref[ref.Number]; ok {
+			if xref_entry, ok := parser.Xref[ref.Number]; ok {
 				xref_entry.IsEncrypted = false
 			}
 		}
 
 		// set the password
-		if !pdf.SetPassword(password) {
+		if !parser.SetPassword(password) {
 			logger.Debug("incorrect password")
-			return pdf, ErrorPassword
+			return parser, ErrorPassword
 		}
 	}
 
-	return pdf, nil
+	return parser, nil
 }
 
 // FindXrefOffsets locates all xref tables
-func (pdf *Pdf) FindXrefOffsets() []int64 {
+func (parser *Parser) FindXrefOffsets() []int64 {
 	offsets := []int64{}
 
 	// jump to start of file
-	offset, _ := pdf.Seek(0, io.SeekStart)
+	offset, _ := parser.Seek(0, io.SeekStart)
 
 	for {
 		// scan for xref table marker
-		index := xref_regexp.FindReaderIndex(pdf)
+		index := xref_regexp.FindReaderIndex(parser)
 		if index == nil {
 			break
 		}
@@ -154,56 +154,56 @@ func (pdf *Pdf) FindXrefOffsets() []int64 {
 		offsets = append(offsets, offset + int64(index[0]))
 
 		// seek to end of xref marker
-		offset, _ = pdf.Seek(offset + int64(index[1]), io.SeekStart)
+		offset, _ = parser.Seek(offset + int64(index[1]), io.SeekStart)
 	}
 
 	return offsets
 }
 
 // FindObjects locates all object markers
-func (pdf *Pdf) FindObjects() map[int]*XrefEntry {
+func (parser *Parser) FindObjects() map[int]*XrefEntry {
 	// create xref map
 	objects := map[int]*XrefEntry{}
 
 	// jump to start of file
-	offset, _ := pdf.Seek(0, io.SeekStart)
+	offset, _ := parser.Seek(0, io.SeekStart)
 
 	for {
 		// scan for object start marker
-		index := start_obj_regexp.FindReaderIndex(pdf)
+		index := start_obj_regexp.FindReaderIndex(parser)
 		if index == nil {
 			break
 		}
 
 		// seek to start of object
-		pdf.Seek(offset + int64(index[0]), io.SeekStart)
+		parser.Seek(offset + int64(index[0]), io.SeekStart)
 
 		// get object number, generation
-		n, g, _ := pdf.ReadObjectHeader()
+		n, g, _ := parser.ReadObjectHeader()
 
 		// add xref entry
 		objects[n] = NewXrefEntry(offset + int64(index[0]), g, XrefTypeIndirectObject)
 
 		// seek to end of object start marker
-		offset, _ = pdf.Seek(offset + int64(index[1]), io.SeekStart)
+		offset, _ = parser.Seek(offset + int64(index[1]), io.SeekStart)
 	}
 
 	return objects
 }
 
-func (pdf *Pdf) SetPassword(password string) bool {
-	sh, err := NewSecurityHandler([]byte(password), pdf.trailer)
+func (parser *Parser) SetPassword(password string) bool {
+	sh, err := NewSecurityHandler([]byte(password), parser.trailer)
 	if err != nil {
 		return false
 	}
-	pdf.security_handler = sh
+	parser.security_handler = sh
 	return true
 }
 
 // GetStartXrefOffset returns the offset to the first xref table
-func (pdf *Pdf) GetStartXrefOffset() (int64, error) {
+func (parser *Parser) GetStartXrefOffset() (int64, error) {
 	// start reading from the end of the file
-	offset, _ := pdf.Seek(0, io.SeekEnd)
+	offset, _ := parser.Seek(0, io.SeekEnd)
 
 	// dont start past begining of file
 	offset -= start_xref_scan_buffer_size
@@ -213,8 +213,8 @@ func (pdf *Pdf) GetStartXrefOffset() (int64, error) {
 
 	// read in buffer at offset
 	buffer := make([]byte, start_xref_scan_buffer_size)
-	pdf.Seek(offset, io.SeekStart)
-	pdf.Read(buffer)
+	parser.Seek(offset, io.SeekStart)
+	parser.Read(buffer)
 
 	// check for start xref
 	matches := start_xref_regexp.FindAllSubmatch(buffer, -1)
@@ -231,7 +231,7 @@ func (pdf *Pdf) GetStartXrefOffset() (int64, error) {
 	return 0, NewError("Start xref marker not found")
 }
 
-func (pdf *Pdf) LoadXref(offset int64, offsets map[int64]interface{}) error {
+func (parser *Parser) LoadXref(offset int64, offsets map[int64]interface{}) error {
 	// track loaded xref offsets to prevent infinite loop
 	if _, ok := offsets[offset]; ok {
 		// xref already loaded
@@ -240,41 +240,41 @@ func (pdf *Pdf) LoadXref(offset int64, offsets map[int64]interface{}) error {
 	offsets[offset] = nil
 
 	// if xref is a table
-	pdf.Seek(offset, io.SeekStart)
-	if keyword := pdf.ReadKeyword(); keyword == KEYWORD_XREF {
-		return pdf.LoadXrefTable(offsets)
+	parser.Seek(offset, io.SeekStart)
+	if keyword := parser.ReadKeyword(); keyword == KEYWORD_XREF {
+		return parser.LoadXrefTable(offsets)
 	}
 
 	// if xref is a stream
-	pdf.Seek(offset, io.SeekStart)
-	if n, g, err := pdf.ReadObjectHeader(); err == nil {
+	parser.Seek(offset, io.SeekStart)
+	if n, g, err := parser.ReadObjectHeader(); err == nil {
 		// prevent decrypting xref streams
-		pdf.Xref[n] = NewXrefEntry(offset, g, XrefTypeIndirectObject)
-		pdf.Xref[n].IsEncrypted = false
+		parser.Xref[n] = NewXrefEntry(offset, g, XrefTypeIndirectObject)
+		parser.Xref[n].IsEncrypted = false
 
 		// read the xref object
-		return pdf.LoadXrefStream(n, offsets)
+		return parser.LoadXrefStream(n, offsets)
 	}
 
 	return NewError("Expected xref table or stream")
 }
 
-func (pdf *Pdf) LoadXrefTable(offsets map[int64]interface{}) error {
+func (parser *Parser) LoadXrefTable(offsets map[int64]interface{}) error {
 	// read all xref entries
 	xrefs := map[int]*XrefEntry{}
 	for {
 		// get subsection start
-		subsection_start, err := pdf.ReadInt()
+		subsection_start, err := parser.ReadInt()
 		if err != nil {
 			// we are at the trailer
-			if keyword := pdf.ReadKeyword(); keyword == KEYWORD_TRAILER {
+			if keyword := parser.ReadKeyword(); keyword == KEYWORD_TRAILER {
 				break
 			}
 			return NewError("Expected int or trailer keyword")
 		}
 
 		// get subsection length
-		subsection_length, err := pdf.ReadInt()
+		subsection_length, err := parser.ReadInt()
 		if err != nil {
 			return err
 		}
@@ -282,19 +282,19 @@ func (pdf *Pdf) LoadXrefTable(offsets map[int64]interface{}) error {
 		// load each object in xref subsection
 		for i := 0; i < subsection_length; i++ {
 			// find xref entry offset
-			offset, err := pdf.ReadInt64()
+			offset, err := parser.ReadInt64()
 			if err != nil {
 				return err
 			}
 
 			// find xref entry generation
-			generation, err := pdf.ReadInt()
+			generation, err := parser.ReadInt()
 			if err != nil {
 				return err
 			}
 
 			// find xref entry in use flag
-			flag := pdf.ReadKeyword()
+			flag := parser.ReadKeyword()
 			xref_type := XrefTypeFreeObject
 			if flag == KEYWORD_N {
 				xref_type = XrefTypeIndirectObject
@@ -309,32 +309,32 @@ func (pdf *Pdf) LoadXrefTable(offsets map[int64]interface{}) error {
 	}
 
 	// read in trailer dictionary
-	trailer, err := pdf.ReadDictionary(noDecryptor)
+	trailer, err := parser.ReadDictionary(noDecryptor)
 	if err != nil {
 		return err
 	}
 
 	// load previous xref section if it exists
 	if prev, err := trailer.GetInt64("Prev"); err == nil {
-		pdf.LoadXref(prev, offsets)
+		parser.LoadXref(prev, offsets)
 	}
 
 	// merge trailer
 	for key, value := range trailer {
-		pdf.trailer[key] = value
+		parser.trailer[key] = value
 	}
 
 	// merge xrefs
 	for key, value := range xrefs {
-		pdf.Xref[key] = value
+		parser.Xref[key] = value
 	}
 
 	return nil
 }
 
-func (pdf *Pdf) LoadXrefStream(n int, offsets map[int64]interface{}) error {
+func (parser *Parser) LoadXrefStream(n int, offsets map[int64]interface{}) error {
 	// Get the xref stream object
-	object := pdf.GetObject(n)
+	object := parser.GetObject(n)
 
 	// get the stream dictionary which is also the trailer dictionary
 	trailer, ok := object.Value.(Dictionary)
@@ -344,12 +344,12 @@ func (pdf *Pdf) LoadXrefStream(n int, offsets map[int64]interface{}) error {
 
 	// load previous xref section if it exists
 	if prev, err := trailer.GetInt64("Prev"); err == nil {
-		pdf.LoadXref(prev, offsets)
+		parser.LoadXref(prev, offsets)
 	}
 
 	// merge trailer
 	for key, value := range trailer {
-		pdf.trailer[key] = value
+		parser.trailer[key] = value
 	}
 
 	// get the index and width arrays
@@ -413,14 +413,14 @@ func (pdf *Pdf) LoadXrefStream(n int, offsets map[int64]interface{}) error {
 			object_number := subsection_start + j
 
 			// add the object to the xrefs
-			pdf.Xref[object_number] = NewXrefEntry(offset, generation, xref_type)
+			parser.Xref[object_number] = NewXrefEntry(offset, generation, xref_type)
 		}
 	}
 
 	return nil
 }
 
-func (pdf *Pdf) ExtractText(extract_dir string) error {
+func (parser *Parser) ExtractText(extract_dir string) error {
 	// create a manifest file to store file name relationships
 	text_file, err := os.Create(path.Join(extract_dir, "contents.txt"))
 	if err != nil {
@@ -428,13 +428,13 @@ func (pdf *Pdf) ExtractText(extract_dir string) error {
 	}
 	defer text_file.Close()
 
-	root, _ := pdf.trailer.GetDictionary("Root")
+	root, _ := parser.trailer.GetDictionary("Root")
 	pages, _ := root.GetDictionary("Pages")
-	pdf.extractText(pages, map[int]interface{}{}, text_file)
+	parser.extractText(pages, map[int]interface{}{}, text_file)
 	return nil
 }
 
-func (pdf *Pdf) extractText(d Dictionary, resolved_kids map[int]interface{}, text_file *os.File) {
+func (parser *Parser) extractText(d Dictionary, resolved_kids map[int]interface{}, text_file *os.File) {
 	kids, _ := d.GetArray("Kids")
 	for i := range kids {
 		// prevent infinite resolve reference loop
@@ -446,7 +446,7 @@ func (pdf *Pdf) extractText(d Dictionary, resolved_kids map[int]interface{}, tex
 		}
 
 		kid, _ := kids.GetDictionary(i)
-		pdf.extractText(kid, resolved_kids, text_file)
+		parser.extractText(kid, resolved_kids, text_file)
 	}
 
 	// load all fonts
@@ -464,7 +464,7 @@ func (pdf *Pdf) extractText(d Dictionary, resolved_kids map[int]interface{}, tex
 	fmt.Fprintln(text_file, string(contents))
 }
 
-func (pdf *Pdf) ExtractFiles(extract_dir string) error {
+func (parser *Parser) ExtractFiles(extract_dir string) error {
 	// create a manifest file to store file name relationships
 	manifest, err := os.Create(path.Join(extract_dir, "embedded_files.txt"))
 	if err != nil {
@@ -473,14 +473,14 @@ func (pdf *Pdf) ExtractFiles(extract_dir string) error {
 	defer manifest.Close()
 
 	// extract all embedded files
-	root, _ := pdf.trailer.GetDictionary("Root")
+	root, _ := parser.trailer.GetDictionary("Root")
 	names, _ := root.GetDictionary("Names")
 	embedded_files, _ := names.GetDictionary("EmbeddedFiles")
-	pdf.extractFiles(embedded_files, extract_dir, map[int]interface{}{}, manifest)
+	parser.extractFiles(embedded_files, extract_dir, map[int]interface{}{}, manifest)
 	return nil
 }
 
-func (pdf *Pdf) extractFiles(d Dictionary, extract_dir string, resolved_kids map[int]interface{}, manifest *os.File) {
+func (parser *Parser) extractFiles(d Dictionary, extract_dir string, resolved_kids map[int]interface{}, manifest *os.File) {
 	kids, _ := d.GetArray("Kids")
 	for i := range kids {
 		// prevent infinite resolve reference loop
@@ -492,7 +492,7 @@ func (pdf *Pdf) extractFiles(d Dictionary, extract_dir string, resolved_kids map
 		}
 
 		kid, _ := kids.GetDictionary(i)
-		pdf.extractFiles(kid, extract_dir, resolved_kids, manifest)
+		parser.extractFiles(kid, extract_dir, resolved_kids, manifest)
 	}
 
 	names, _ := d.GetArray("Names")
@@ -504,7 +504,7 @@ func (pdf *Pdf) extractFiles(d Dictionary, extract_dir string, resolved_kids map
 		file_data := []byte{}
 		if file_reference, err := ef.GetReference("F"); err == nil {
 			// mark object as embedded file so alternate decryption algorithms are used
-			if xref_entry, ok := pdf.Xref[file_reference.Number]; ok {
+			if xref_entry, ok := parser.Xref[file_reference.Number]; ok {
 				xref_entry.IsEmbeddedFile = true
 			}
 			file_data = file_reference.ResolveStream()
@@ -524,35 +524,35 @@ func (pdf *Pdf) extractFiles(d Dictionary, extract_dir string, resolved_kids map
 	}
 }
 
-func (pdf *Pdf) GetObject(number int) *IndirectObject {
+func (parser *Parser) GetObject(number int) *IndirectObject {
 	logger.Debug("Reading object %d", number)
 
 	object := NewIndirectObject(number)
 
-	if xref_entry, ok := pdf.Xref[number]; ok {
+	if xref_entry, ok := parser.Xref[number]; ok {
 		if xref_entry.Type == XrefTypeIndirectObject {
 			// set generation number
 			object.Generation = xref_entry.Generation
 
 			// seek to start of object
-			pdf.Seek(xref_entry.Offset, io.SeekStart)
+			parser.Seek(xref_entry.Offset, io.SeekStart)
 
 			// skip object header
-			pdf.ReadObjectHeader()
+			parser.ReadObjectHeader()
 
 			// initialize string decryption filter
 			var string_filter CryptFilter = noFilter
-			if pdf.security_handler != nil {
-				string_filter = pdf.security_handler.string_filter
+			if parser.security_handler != nil {
+				string_filter = parser.security_handler.string_filter
 			}
 			string_decryptor := string_filter.NewDecryptor(number, object.Generation)
 
 			// get the value of the object
 			logger.Debug("Reading object value")
-			object.Value, _ = pdf.ReadObject(string_decryptor)
+			object.Value, _ = parser.ReadObject(string_decryptor)
 
 			// get next keyword
-			if keyword := pdf.ReadKeyword(); keyword == KEYWORD_STREAM {
+			if keyword := parser.ReadKeyword(); keyword == KEYWORD_STREAM {
 				logger.Debug("Reading object stream")
 				// get stream dictionary
 				d, ok := object.Value.(Dictionary)
@@ -582,13 +582,13 @@ func (pdf *Pdf) GetObject(number int) *IndirectObject {
 
 				// create a stream decryptor
 				var crypt_filter CryptFilter = noFilter
-				if pdf.security_handler != nil && xref_entry.IsEncrypted {
+				if parser.security_handler != nil && xref_entry.IsEncrypted {
 					// use stream filter by default
-					crypt_filter = pdf.security_handler.stream_filter
+					crypt_filter = parser.security_handler.stream_filter
 
 					// use embedded file filter if object is an embedded file
 					if xref_entry.IsEmbeddedFile {
-						crypt_filter = pdf.security_handler.file_filter
+						crypt_filter = parser.security_handler.file_filter
 					}
 
 					// handle crypt filter override
@@ -599,7 +599,7 @@ func (pdf *Pdf) GetObject(number int) *IndirectObject {
 							if err != nil {
 								filter_name = "Identity"
 							}
-							if cf, exists := pdf.security_handler.crypt_filters[filter_name]; exists {
+							if cf, exists := parser.security_handler.crypt_filters[filter_name]; exists {
 								crypt_filter = cf
 							}
 							filter_list = filter_list[1:]
@@ -612,7 +612,7 @@ func (pdf *Pdf) GetObject(number int) *IndirectObject {
 				stream_decryptor := crypt_filter.NewDecryptor(number, xref_entry.Generation)
 
 				// read the stream
-				object.Stream = pdf.ReadStream(stream_decryptor, filter_list, decode_parms_list)
+				object.Stream = parser.ReadStream(stream_decryptor, filter_list, decode_parms_list)
 			}
 		}
 	}
@@ -620,129 +620,123 @@ func (pdf *Pdf) GetObject(number int) *IndirectObject {
 	return object
 }
 
-func (pdf *Pdf) Seek(offset int64, whence int) (int64, error) {
-	pdf.Reset(pdf.seeker)
-	return pdf.seeker.Seek(offset, whence)
+func (parser *Parser) Seek(offset int64, whence int) (int64, error) {
+	parser.Reset(parser.seeker)
+	return parser.seeker.Seek(offset, whence)
 }
 
-func (pdf *Pdf) CurrentOffset() int64 {
-	offset, err := pdf.seeker.Seek(0, io.SeekCurrent)
+func (parser *Parser) CurrentOffset() int64 {
+	offset, err := parser.seeker.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return 0
 	}
-	return offset - int64(pdf.Buffered())
+	return offset - int64(parser.Buffered())
 }
 
 // ReadObjectHeader reads an object header (10 0 obj) from the current position and returns the object number and generation
-func (pdf *Pdf) ReadObjectHeader() (int, int, error) {
+func (parser *Parser) ReadObjectHeader() (int, int, error) {
 	// read object number
-	number, err := pdf.ReadInt()
+	number, err := parser.ReadInt()
 	if err != nil {
 		return number, 0, err
 	}
 
 	// read object generation
-	generation, err := pdf.ReadInt()
+	generation, err := parser.ReadInt()
 	if err != nil {
 		return number, generation, err
 	}
 
 	// read object start marker
-	if keyword := pdf.ReadKeyword(); keyword != KEYWORD_OBJ {
+	if keyword := parser.ReadKeyword(); keyword != KEYWORD_OBJ {
 		return number, generation, NewError("Expected obj keyword")
 	}
 	return number, generation, nil
 }
 
-func (pdf *Pdf) ReadObject(decryptor Decryptor) (Object, error) {
+func (parser *Parser) ReadObject(decryptor Decryptor) (Object, error) {
 	// consume any leading whitespace/comments
-	pdf.consumeWhitespace()
+	parser.consumeWhitespace()
 
 	// peek at next 2 bytes to determine object type
-	b, _ := pdf.Peek(2)
+	b, _ := parser.Peek(2)
 	if len(b) == 0 {
 		return KEYWORD_NULL, ErrorRead
 	}
 
 	// handle names
 	if b[0] == '/' {
-		return pdf.ReadName()
+		return parser.ReadName()
 	}
 
 	// handle arrays
 	if b[0] == '[' {
-		return pdf.ReadArray(decryptor)
+		return parser.ReadArray(decryptor)
 	}
 	if b[0] == ']' {
-		pdf.Discard(1)
+		parser.Discard(1)
 		return KEYWORD_NULL, EndOfArray
 	}
 
 	// handle strings
 	if b[0] == '(' {
-		return pdf.ReadString(decryptor)
+		return parser.ReadString(decryptor)
 	}
 
 	// handle dictionaries
 	if string(b) == "<<" {
-		return pdf.ReadDictionary(decryptor)
+		return parser.ReadDictionary(decryptor)
 	}
 	if string(b) == ">>" {
-		pdf.Discard(2)
+		parser.Discard(2)
 		return KEYWORD_NULL, EndOfDictionary
 	}
 
 	// handle hex strings
 	if b[0] == '<' {
-		return pdf.ReadHexString(decryptor)
-	}
-
-	// handle keywords
-	if (b[0] >= 'a' && b[0] <= 'z') || b[0] == 'R' {
-		return pdf.ReadKeyword(), nil
+		return parser.ReadHexString(decryptor)
 	}
 
 	// handle numbers and references
 	if (b[0] >= '0' && b[0] <= '9') || b[0] == '+' || b[0] == '-' || b[0] == '.' {
-		number, err := pdf.ReadNumber()
+		number, err := parser.ReadNumber()
 		if err != nil {
 			return number, err
 		}
 
 		// save offset so we can revert if this is not a reference
-		offset := pdf.CurrentOffset()
+		offset := parser.CurrentOffset()
 
 		// if generation number does not follow then revert to saved offset and return number
-		generation, err := pdf.ReadInt()
+		generation, err := parser.ReadInt()
 		if err != nil {
-			pdf.Seek(offset, io.SeekStart)
+			parser.Seek(offset, io.SeekStart)
 			return number, nil
 		}
 
 		// if not a reference then revert to saved offset and return the number
-		if keyword := pdf.ReadKeyword(); keyword != KEYWORD_R {
-			pdf.Seek(offset, io.SeekStart)
+		if keyword := parser.ReadKeyword(); keyword != KEYWORD_R {
+			parser.Seek(offset, io.SeekStart)
 			return number, nil
 		}
 
 		// return the reference
-		return NewReference(pdf, int(number), generation), nil
+		return NewReference(parser, int(number), generation), nil
 	}
 
-	// report unknown object
-	pdf.Discard(1)
-	return KEYWORD_NULL, NewError("Expected array, dictionary, keyword, name, number, reference or string")
+	// handle keywords
+	return parser.ReadKeyword(), nil
 }
 
-func (pdf *Pdf) ReadArray(decryptor Decryptor) (Array, error) {
+func (parser *Parser) ReadArray(decryptor Decryptor) (Array, error) {
 	// consume any leading whitespace/comments
-	pdf.consumeWhitespace()
+	parser.consumeWhitespace()
 
 	// create a new array
 	array := Array{}
 
 	// read start of array marker
-	b, err := pdf.ReadByte()
+	b, err := parser.ReadByte()
 	if err != nil {
 		return array, ErrorRead
 	}
@@ -752,7 +746,7 @@ func (pdf *Pdf) ReadArray(decryptor Decryptor) (Array, error) {
 
 	// read in elements and append to array
 	for {
-		element, err := pdf.ReadObject(decryptor)
+		element, err := parser.ReadObject(decryptor)
 		if err == ErrorRead || err == EndOfArray {
 			// stop if at eof or end of array
 			break
@@ -764,16 +758,16 @@ func (pdf *Pdf) ReadArray(decryptor Decryptor) (Array, error) {
 	return array, nil
 }
 
-func (pdf *Pdf) ReadDictionary(decryptor Decryptor) (Dictionary, error) {
+func (parser *Parser) ReadDictionary(decryptor Decryptor) (Dictionary, error) {
 	// consume any leading whitespace/comments
-	pdf.consumeWhitespace()
+	parser.consumeWhitespace()
 
 	// create new dictionary
 	dictionary := Dictionary{}
 
 	// read start of dictionary markers
 	b := make([]byte, 2)
-	_, err := pdf.Read(b)
+	_, err := parser.Read(b)
 	if err != nil {
 		return dictionary, ErrorRead
 	}
@@ -784,7 +778,7 @@ func (pdf *Pdf) ReadDictionary(decryptor Decryptor) (Dictionary, error) {
 	// parse all key value pairs
 	for {
 		// read next object
-		name, err := pdf.ReadObject(decryptor)
+		name, err := parser.ReadObject(decryptor)
 		if err == ErrorRead || err == EndOfDictionary {
 			break
 		}
@@ -794,7 +788,7 @@ func (pdf *Pdf) ReadDictionary(decryptor Decryptor) (Dictionary, error) {
 		}
 
 		// get value
-		value, err := pdf.ReadObject(decryptor)
+		value, err := parser.ReadObject(decryptor)
 
 		// add key value pair to dictionary
 		dictionary[string(key)] = value
@@ -807,15 +801,15 @@ func (pdf *Pdf) ReadDictionary(decryptor Decryptor) (Dictionary, error) {
 	return dictionary, nil
 }
 
-func (pdf *Pdf) ReadHexString(decryptor Decryptor) (String, error) {
+func (parser *Parser) ReadHexString(decryptor Decryptor) (String, error) {
 	// consume any leading whitespace/comments
-	pdf.consumeWhitespace()
+	parser.consumeWhitespace()
 
 	// create new string builder
 	var s strings.Builder
 
 	// read start of hex string marker
-	b, err := pdf.ReadByte()
+	b, err := parser.ReadByte()
 	if err != nil {
 		return String(s.String()), ErrorRead
 	}
@@ -827,8 +821,8 @@ func (pdf *Pdf) ReadHexString(decryptor Decryptor) (String, error) {
 	for {
 		code := []byte{'0', '0'}
 		for i := 0; i < 2; {
-			pdf.consumeWhitespace()
-			b, err := pdf.ReadByte()
+			parser.consumeWhitespace()
+			b, err := parser.ReadByte()
 			if err != nil || b == '>' {
 				if i > 0 {
 					val, _ := strconv.ParseUint(string(code), 16, 8)
@@ -847,22 +841,22 @@ func (pdf *Pdf) ReadHexString(decryptor Decryptor) (String, error) {
 	}
 }
 
-func (pdf *Pdf) ReadInt() (int, error) {
-	value, err := pdf.ReadInt64()
+func (parser *Parser) ReadInt() (int, error) {
+	value, err := parser.ReadInt64()
 	return int(value), err
 }
 
-func (pdf *Pdf) ReadInt64() (int64, error) {
+func (parser *Parser) ReadInt64() (int64, error) {
 	// consume any leading whitespace/comments
-	pdf.consumeWhitespace()
+	parser.consumeWhitespace()
 
 	// create a new number object
 	value := int64(0)
 
 	// ensure first byte is a digit
-	b, err := pdf.ReadByte()
+	b, err := parser.ReadByte()
 	if err != nil || b < '0' || b > '9' {
-		pdf.UnreadByte()
+		parser.UnreadByte()
 		return value, NewError("Expected int")
 	}
 
@@ -871,14 +865,14 @@ func (pdf *Pdf) ReadInt64() (int64, error) {
 
 	// parse int part
 	for {
-		b, err = pdf.ReadByte()
+		b, err = parser.ReadByte()
 		if err != nil {
 			break
 		}
 
 		// stop if no numeric char
 		if b < '0' || b > '9' {
-			pdf.UnreadByte()
+			parser.UnreadByte()
 			break
 		}
 
@@ -889,23 +883,23 @@ func (pdf *Pdf) ReadInt64() (int64, error) {
 	return value, nil
 }
 
-func (pdf *Pdf) ReadKeyword() Keyword {
+func (parser *Parser) ReadKeyword() Keyword {
 	// consume any leading whitespace/comments
-	pdf.consumeWhitespace()
+	parser.consumeWhitespace()
 
 	// build keyword
 	var keyword strings.Builder
 
 	for {
 		// read in the next byte
-		b, err := pdf.ReadByte()
+		b, err := parser.ReadByte()
 		if err != nil {
 			break
 		}
 
 		// stop if not keyword character
 		if (b < 'a' || b >'z') && b != 'R' {
-			pdf.UnreadByte()
+			parser.UnreadByte()
 			break
 		}
 
@@ -917,15 +911,15 @@ func (pdf *Pdf) ReadKeyword() Keyword {
 	return NewKeyword(keyword.String())
 }
 
-func (pdf *Pdf) ReadName() (Name, error) {
+func (parser *Parser) ReadName() (Name, error) {
 	// consume any leading whitespace/comments
-	pdf.consumeWhitespace()
+	parser.consumeWhitespace()
 
 	// build name
 	var name strings.Builder
 
 	// read start of name marker
-	b, err := pdf.ReadByte()
+	b, err := parser.ReadByte()
 	if err != nil {
 		return Name(name.String()), ErrorRead
 	}
@@ -935,14 +929,14 @@ func (pdf *Pdf) ReadName() (Name, error) {
 
 	for {
 		// read in the next byte
-		b, err = pdf.ReadByte()
+		b, err = parser.ReadByte()
 		if err != nil {
 			return Name(name.String()), nil
 		}
 
 		// if the next byte is whitespace or delimiter then unread it and return the name
 		if bytes.IndexByte(delimiters, b) >= 0 || bytes.IndexByte(whitespace, b) >= 0 {
-			pdf.UnreadByte()
+			parser.UnreadByte()
 			break
 		}
 
@@ -951,12 +945,12 @@ func (pdf *Pdf) ReadName() (Name, error) {
 			// read in the hex code
 			code := []byte{'0', '0'}
 			for i := 0; i < 2; i++ {
-				b, err = pdf.ReadByte()
+				b, err = parser.ReadByte()
 				if err != nil {
 					break
 				}
 				if !IsHex(b) {
-					pdf.UnreadByte()
+					parser.UnreadByte()
 					break
 				}
 				code[i] = b
@@ -974,9 +968,9 @@ func (pdf *Pdf) ReadName() (Name, error) {
 	return Name(name.String()), nil
 }
 
-func (pdf *Pdf) ReadNumber() (Number, error) {
+func (parser *Parser) ReadNumber() (Number, error) {
 	// consume any leading whitespace/comments
-	pdf.consumeWhitespace()
+	parser.consumeWhitespace()
 
 	// create a new number object
 	var number Number
@@ -984,7 +978,7 @@ func (pdf *Pdf) ReadNumber() (Number, error) {
 	isNegative := false
 
 	// process first byte
-	b, err := pdf.ReadByte()
+	b, err := parser.ReadByte()
 	if err != nil {
 		return number, ErrorRead
 	}
@@ -995,13 +989,13 @@ func (pdf *Pdf) ReadNumber() (Number, error) {
 	} else if b == '.' {
 		isReal = true
 	} else if b != '+' {
-		pdf.UnreadByte()
+		parser.UnreadByte()
 		return number, NewError("Expected number")
 	}
 
 	// parse int part
 	for !isReal {
-		b, err = pdf.ReadByte()
+		b, err = parser.ReadByte()
 		if err != nil {
 			break
 		}
@@ -1011,7 +1005,7 @@ func (pdf *Pdf) ReadNumber() (Number, error) {
 		} else if b == '.' {
 			isReal = true
 		} else {
-			pdf.UnreadByte()
+			parser.UnreadByte()
 			break
 		}
 	}
@@ -1019,7 +1013,7 @@ func (pdf *Pdf) ReadNumber() (Number, error) {
 	// parse real part
 	if isReal {
 		for i := 1; true; i++ {
-			b, err = pdf.ReadByte()
+			b, err = parser.ReadByte()
 			if err != nil {
 				break
 			}
@@ -1027,7 +1021,7 @@ func (pdf *Pdf) ReadNumber() (Number, error) {
 			if b >= '0' && b <= '9' {
 				number = Number(float64(number) + float64(b - '0') / (10 * float64(i)))
 			} else {
-				pdf.UnreadByte()
+				parser.UnreadByte()
 				break
 			}
 		}
@@ -1042,13 +1036,13 @@ func (pdf *Pdf) ReadNumber() (Number, error) {
 	return number, nil
 }
 
-func (pdf *Pdf) ReadStream(decryptor Decryptor, filter_list Array, decode_parms_list Array) []byte {
+func (parser *Parser) ReadStream(decryptor Decryptor, filter_list Array, decode_parms_list Array) []byte {
 	// create buffers for stream data
 	stream_data := bytes.NewBuffer([]byte{})
 
 	// read until new line
 	for {
-		b, err := pdf.ReadByte()
+		b, err := parser.ReadByte()
 		if err != nil {
 			return stream_data.Bytes()
 		}
@@ -1060,13 +1054,13 @@ func (pdf *Pdf) ReadStream(decryptor Decryptor, filter_list Array, decode_parms_
 
 		// if carriage return check if next byte is line feed
 		if b == '\r' {
-			b, err := pdf.ReadByte()
+			b, err := parser.ReadByte()
 			if err != nil {
 				return stream_data.Bytes()
 			}
 			// if not new line then put it back cause it is part of the stream data
 			if b != '\n' {
-				pdf.UnreadByte()
+				parser.UnreadByte()
 			}
 			break
 		}
@@ -1075,7 +1069,7 @@ func (pdf *Pdf) ReadStream(decryptor Decryptor, filter_list Array, decode_parms_
 	// read first 9 bytes to get started
 	end_buff := bytes.NewBuffer([]byte{})
 	buff := make([]byte, 9)
-	bytes_read, _ := pdf.Read(buff)
+	bytes_read, _ := parser.Read(buff)
 	if bytes_read > 0 {
 		end_buff.Write(buff[:bytes_read])
 	}
@@ -1105,7 +1099,7 @@ func (pdf *Pdf) ReadStream(decryptor Decryptor, filter_list Array, decode_parms_
 		stream_data.WriteByte(b)
 
 		// add next byte of stream to end_buff
-		b, err = pdf.ReadByte()
+		b, err = parser.ReadByte()
 		if err != nil {
 			stream_data.Write(end_buff.Bytes())
 			break
@@ -1132,15 +1126,15 @@ func (pdf *Pdf) ReadStream(decryptor Decryptor, filter_list Array, decode_parms_
 	return stream_data_bytes
 }
 
-func (pdf *Pdf) ReadString(decryptor Decryptor) (String, error) {
+func (parser *Parser) ReadString(decryptor Decryptor) (String, error) {
 	// consume any leading whitespace/comments
-	pdf.consumeWhitespace()
+	parser.consumeWhitespace()
 
 	// create new string builder
 	var s strings.Builder
 
 	// read start of string marker
-	b, err := pdf.ReadByte()
+	b, err := parser.ReadByte()
 	if err != nil {
 		return String(s.String()), ErrorRead
 	}
@@ -1151,7 +1145,7 @@ func (pdf *Pdf) ReadString(decryptor Decryptor) (String, error) {
 	// find balanced closing bracket
 	for open_parens := 1; true; {
 		// read next byte
-		b, err = pdf.ReadByte()
+		b, err = parser.ReadByte()
 		if err != nil {
 			return String(decryptor.Decrypt([]byte(s.String()))), nil
 		}
@@ -1159,7 +1153,7 @@ func (pdf *Pdf) ReadString(decryptor Decryptor) (String, error) {
 		// if this is the start of an escape sequence
 		if b == '\\' {
 			// read next byte
-			b, err = pdf.ReadByte()
+			b, err = parser.ReadByte()
 			if err != nil {
 				s.WriteByte('\\')
 				return String(decryptor.Decrypt([]byte(s.String()))), nil
@@ -1171,13 +1165,13 @@ func (pdf *Pdf) ReadString(decryptor Decryptor) (String, error) {
 			}
 			if b == '\r' {
 				// read next byte
-				b, err = pdf.ReadByte()
+				b, err = parser.ReadByte()
 				if err != nil {
 					return String(decryptor.Decrypt([]byte(s.String()))), nil
 				}
 				// if byte is not a new line then unread it
 				if b != '\n' {
-					pdf.UnreadByte()
+					parser.UnreadByte()
 				}
 				continue
 			}
@@ -1203,7 +1197,7 @@ func (pdf *Pdf) ReadString(decryptor Decryptor) (String, error) {
 				// add at most 2 more bytes to code
 				for i := 0; i < 2; i++ {
 					// read next byte
-					b, err = pdf.ReadByte()
+					b, err = parser.ReadByte()
 					if err != nil {
 						break
 					}
@@ -1211,7 +1205,7 @@ func (pdf *Pdf) ReadString(decryptor Decryptor) (String, error) {
 					// if next byte is not part of the octal code
 					if b < '0' || b > '7' {
 						// unread the byte and stop collecting code
-						pdf.UnreadByte()
+						parser.UnreadByte()
 						break
 					}
 
@@ -1223,7 +1217,7 @@ func (pdf *Pdf) ReadString(decryptor Decryptor) (String, error) {
 				val, err := strconv.ParseUint(string(code.Bytes()), 8, 8)
 				if err != nil {
 					// octal code is too large so ignore last byte
-					pdf.UnreadByte()
+					parser.UnreadByte()
 					val, _ = strconv.ParseUint(string(code.Bytes()[:code.Len()-1]), 8, 8)
 				}
 				b = byte(val)
@@ -1255,28 +1249,28 @@ func (pdf *Pdf) ReadString(decryptor Decryptor) (String, error) {
 }
 
 // consumeWhitespace reads until end of whitespace/comments
-func (pdf *Pdf) consumeWhitespace() {
+func (parser *Parser) consumeWhitespace() {
 	for {
 		// get next byte
-		b, err := pdf.ReadByte()
+		b, err := parser.ReadByte()
 		if err != nil {
 			return
 		}
 
 		// consume comments and whitespace
 		if b == '%' {
-			pdf.consumeComment()
+			parser.consumeComment()
 		} else if bytes.IndexByte(whitespace, b) < 0 {
-			pdf.UnreadByte()
+			parser.UnreadByte()
 			return
 		}
 	}
 }
 
-func (pdf *Pdf) consumeComment() {
+func (parser *Parser) consumeComment() {
 	for {
 		// get next byte
-		b, err := pdf.ReadByte()
+		b, err := parser.ReadByte()
 		if err != nil {
 			return
 		}
@@ -1289,12 +1283,12 @@ func (pdf *Pdf) consumeComment() {
 		// stop on carriage return
 		if b == '\r' {
 			// consume optional line feed
-			b, err := pdf.ReadByte()
+			b, err := parser.ReadByte()
 			if err != nil {
 				return
 			}
 			if b != '\n' {
-				pdf.UnreadByte()
+				parser.UnreadByte()
 			}
 			return
 		}
