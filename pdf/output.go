@@ -1,6 +1,10 @@
 package pdf
 
 import (
+	"crypto/md5"
+	"encoding/hex"
+	"fmt"
+	"io/ioutil"
 	"os"
 	"path"
 )
@@ -83,4 +87,17 @@ func (output *Output) Close() {
 	if output.URLs != nil {
 		output.URLs.Close()
 	}
+}
+
+func (output *Output) DumpFile(name string, data []byte) {
+	// get md5 hash of the file
+	hash := md5.New()
+	hash.Write(data)
+	md5sum := hex.EncodeToString(hash.Sum(nil))
+
+	// add to manifest
+	fmt.Fprintf(output.Files, "%s:%s\n", md5sum, name)
+
+	// write file data to file in extract dir
+	ioutil.WriteFile(path.Join(output.Directory, md5sum), data, 0644)
 }

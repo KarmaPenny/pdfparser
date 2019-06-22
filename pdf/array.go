@@ -104,6 +104,16 @@ func (a Array) GetObject(index int) (Object, error) {
 	return object, nil
 }
 
+func (a Array) GetStream(index int) ([]byte, error) {
+	if index < 0 || index >= len(a) {
+		return []byte{}, NewError("index out of bounds")
+	}
+	if reference, ok := a[index].(*Reference); ok {
+		return reference.ResolveStream(), nil
+	}
+	return []byte{}, NewError("Expected reference")
+}
+
 func (a Array) GetString(index int) (string, error) {
 	object, err := a.GetObject(index)
 	if err != nil {

@@ -57,6 +57,19 @@ func extract(d Dictionary, output *Output) {
 		}
 	}
 
+	// dump forms
+	if xfa, err := d.GetStream("XFA"); err == nil {
+		output.DumpFile("form.xml", xfa)
+	} else if xfa, err := d.GetArray("XFA"); err == nil {
+		var form_data strings.Builder
+		for i := range xfa {
+			if s, err := xfa.GetStream(i); err == nil {
+				form_data.WriteString(string(s))
+			}
+		}
+		output.DumpFile("form.xml", []byte(form_data.String()))
+	}
+
 	// dump Embedded Files
 	embedded_files := d.GetNameTreeMap("EmbeddedFiles")
 	for i := 1; i < len(embedded_files); i += 2 {
