@@ -22,20 +22,20 @@ go clean -i github.com/KarmaPenny/pdfparser && rm -rf $(go env GOPATH)/src/githu
 
 ## Usage
 #### Command Line
-The following command extracts the contents of input.pdf to the input.pdf.extracted directory:
+The following command extracts the contents of input.pdf to the output directory using "password" for decryption:
 ```bash
-$(go env GOPATH)/bin/pdfparser input.pdf
+$(go env GOPATH)/bin/pdfparser -o output -p password input.pdf
 ```
 
 #### Library
-The following program extracts the contents of test.pdf to the output directory using "password" for decryption:
+The following program extracts the contents of input.pdf to the output directory using "password" for decryption:
 ```go
 package main
 
 import "github.com/KarmaPenny/pdfparser/pdf"
 
 func main() {
-	pdf.Parse("test.pdf", "password", "output")
+	pdf.Parse("input.pdf", "password", "output")
 }
 ```
 
