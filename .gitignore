@@ -1,3 +1,4 @@
 *.swp
 pdfparser
 parsed.pdf
+*.extracted/

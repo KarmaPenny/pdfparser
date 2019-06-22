@@ -3,14 +3,8 @@ package pdf
 import (
 	"bufio"
 	"bytes"
-	"crypto/md5"
-	"encoding/hex"
-	"fmt"
 	"github.com/KarmaPenny/pdfparser/logger"
 	"io"
-	"io/ioutil"
-	"os"
-	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -23,77 +17,16 @@ var xref_regexp = regexp.MustCompile(`xref`)
 var whitespace = []byte("\x00\t\n\f\r ")
 var delimiters = []byte("()<>[]/%")
 
-func Parse(file_path string, password string, output_dir string) error {
-	// create output dir
-	os.RemoveAll(output_dir)
-	os.MkdirAll(output_dir, 0755)
-
-	// open the pdf
-	file, err := os.Open(file_path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	// create a new parser
-	parser := NewParser(file)
-
-	// create javascript file
-	parser.javascript, err = os.Create(path.Join(output_dir, "javascript.js"))
-	if err != nil {
-		return err
-	}
-	defer parser.javascript.Close()
-
-	// create urls file
-	parser.urls, err = os.Create(path.Join(output_dir, "urls.txt"))
-	if err != nil {
-		return err
-	}
-	defer parser.urls.Close()
-
-	// load the pdf
-	if err := parser.Load(password); err != nil {
-		return err
-	}
-
-	// extract embedded files
-	parser.ExtractFiles(output_dir)
-
-	// extract text
-	parser.ExtractText(output_dir)
-
-	// create raw.pdf file in output dir
-	raw_pdf, err := os.Create(path.Join(output_dir, "raw.pdf"))
-	defer raw_pdf.Close()
-
-	// dump all objects to raw.pdf
-	for object_number, xref_entry := range parser.Xref {
-		if xref_entry.Type == XrefTypeIndirectObject {
-			object := parser.GetObject(object_number)
-			fmt.Fprintf(raw_pdf, "%d %d obj\n%s\n", object.Number, object.Generation, object.Value)
-			if object.Stream != nil {
-				fmt.Fprintf(raw_pdf, "stream\n%s\nendstream\n", string(object.Stream))
-			}
-			fmt.Fprintf(raw_pdf, "endobj\n\n")
-		}
-	}
-
-	return nil
-}
-
 type Parser struct {
 	*bufio.Reader
 	seeker io.ReadSeeker
 	Xref map[int]*XrefEntry
 	trailer Dictionary
 	security_handler *SecurityHandler
-	javascript *os.File
-	urls *os.File
 }
 
 func NewParser(readSeeker io.ReadSeeker) *Parser {
-	return &Parser{bufio.NewReader(readSeeker), readSeeker, map[int]*XrefEntry{}, Dictionary{}, defaultSecurityHandler, nil, nil}
+	return &Parser{bufio.NewReader(readSeeker), readSeeker, map[int]*XrefEntry{}, Dictionary{}, defaultSecurityHandler}
 }
 
 func (parser *Parser) Load(password string) error {
@@ -436,160 +369,6 @@ func (parser *Parser) LoadXrefStream(n int, offsets map[int64]interface{}) error
 	return nil
 }
 
-func (parser *Parser) ExtractText(extract_dir string) error {
-	// create a manifest file to store file name relationships
-	text_file, err := os.Create(path.Join(extract_dir, "contents.txt"))
-	if err != nil {
-		return err
-	}
-	defer text_file.Close()
-
-	root, _ := parser.trailer.GetDictionary("Root")
-	pages, _ := root.GetDictionary("Pages")
-	parser.extractText(pages, map[int]interface{}{}, text_file)
-	return nil
-}
-
-func (parser *Parser) extractText(d Dictionary, resolved_kids map[int]interface{}, text_file *os.File) {
-	kids, _ := d.GetArray("Kids")
-	for i := range kids {
-		// prevent infinite resolve reference loop
-		if r, ok := kids[i].(*Reference); ok {
-			if _, resolved := resolved_kids[r.Number]; resolved {
-				continue
-			}
-			resolved_kids[r.Number] = nil
-		}
-
-		kid, _ := kids.GetDictionary(i)
-		parser.extractText(kid, resolved_kids, text_file)
-	}
-
-	// load all fonts
-	resources, _ := d.GetDictionary("Resources")
-	fonts, _ := resources.GetDictionary("Font")
-	font_map := map[string]*Font{}
-	for font := range fonts {
-		fontd, _ := fonts.GetDictionary(font)
-		cmap, _ := fontd.GetStream("ToUnicode")
-		font_map[font] = NewFont(cmap)
-	}
-
-	// get contents
-	contents, _ := d.GetStream("Contents")
-
-	// create parser for parsing contents
-	contents_parser := NewParser(bytes.NewReader(contents))
-
-	// parse text
-	for {
-		// read next command
-		command, _, err := contents_parser.ReadCommand()
-		if err == ErrorRead {
-			break
-		}
-
-		// start of text block
-		if command == KEYWORD_TEXT {
-			// initial font is none
-			current_font := FontDefault
-
-			for {
-				command, operands, err := contents_parser.ReadCommand()
-				// stop if end of stream or end of text block
-				if err == ErrorRead || command == KEYWORD_TEXT_END {
-					break
-				}
-
-				// handle font changes
-				if command == KEYWORD_TEXT_FONT {
-					font_name, _ := operands.GetName(len(operands) - 2)
-					if font, ok := font_map[font_name]; ok {
-						current_font = font
-					} else {
-						current_font = FontDefault
-					}
-				} else if command == KEYWORD_TEXT_SHOW_1 || command == KEYWORD_TEXT_SHOW_2 || command == KEYWORD_TEXT_SHOW_3 {
-					// decode text with current font font
-					s, _ := operands.GetString(len(operands) - 1)
-					text_file.WriteString(current_font.Decode([]byte(s)))
-					text_file.WriteString("\n")
-				} else if command == KEYWORD_TEXT_POSITION {
-					// decode positioned text with current font
-					var sb strings.Builder
-					a, _ := operands.GetArray(len(operands) - 1)
-					for i := 0; i < len(a); i += 2 {
-						s, _ := a.GetString(i)
-						sb.WriteString(string(s))
-					}
-					text_file.WriteString(current_font.Decode([]byte(sb.String())))
-					text_file.WriteString("\n")
-				}
-			}
-		}
-	}
-}
-
-func (parser *Parser) ExtractFiles(extract_dir string) error {
-	// create a manifest file to store file name relationships
-	manifest, err := os.Create(path.Join(extract_dir, "embedded_files.txt"))
-	if err != nil {
-		return err
-	}
-	defer manifest.Close()
-
-	// extract all embedded files
-	root, _ := parser.trailer.GetDictionary("Root")
-	names, _ := root.GetDictionary("Names")
-	embedded_files, _ := names.GetDictionary("EmbeddedFiles")
-	parser.extractFiles(embedded_files, extract_dir, map[int]interface{}{}, manifest)
-	return nil
-}
-
-func (parser *Parser) extractFiles(d Dictionary, extract_dir string, resolved_kids map[int]interface{}, manifest *os.File) {
-	kids, _ := d.GetArray("Kids")
-	for i := range kids {
-		// prevent infinite resolve reference loop
-		if r, ok := kids[i].(*Reference); ok {
-			if _, resolved := resolved_kids[r.Number]; resolved {
-				continue
-			}
-			resolved_kids[r.Number] = nil
-		}
-
-		kid, _ := kids.GetDictionary(i)
-		parser.extractFiles(kid, extract_dir, resolved_kids, manifest)
-	}
-
-	names, _ := d.GetArray("Names")
-	for i := 1; i < len(names); i += 2 {
-		file_specification, _ := names.GetDictionary(i)
-
-		// read in file data
-		ef, _ := file_specification.GetDictionary("EF")
-		file_data := []byte{}
-		if file_reference, err := ef.GetReference("F"); err == nil {
-			// mark object as embedded file so alternate decryption algorithms are used
-			if xref_entry, ok := parser.Xref[file_reference.Number]; ok {
-				xref_entry.IsEmbeddedFile = true
-			}
-			file_data = file_reference.ResolveStream()
-		}
-
-		// get md5 hash of the file
-		hash := md5.New()
-		hash.Write(file_data)
-		md5sum := hex.EncodeToString(hash.Sum(nil))
-
-		// add file name relationship to manifest
-		file_name, _ := file_specification.GetString("F")
-		fmt.Fprintf(manifest, "%s %s", md5sum, file_name)
-
-		// write file data to file in extract dir
-		ioutil.WriteFile(path.Join(extract_dir, md5sum), file_data, 0644)
-	}
-}
-
 func (parser *Parser) GetObject(number int) *IndirectObject {
 	logger.Debug("Reading object %d", number)
 
@@ -653,7 +432,7 @@ func (parser *Parser) GetObject(number int) *IndirectObject {
 					crypt_filter = parser.security_handler.stream_filter
 
 					// use embedded file filter if object is an embedded file
-					if xref_entry.IsEmbeddedFile {
+					if t, err := d.GetName("Type"); err == nil && string(t) == "EmbeddedFile" {
 						crypt_filter = parser.security_handler.file_filter
 					}
 
@@ -873,31 +652,6 @@ func (parser *Parser) ReadDictionary(decryptor Decryptor) (Dictionary, error) {
 
 		// add key value pair to dictionary
 		dictionary[string(key)] = value
-
-		if string(key) == "JS" {
-			if parser.javascript != nil {
-				// dump javascript
-				if s, err := dictionary.GetString(string(key)); err == nil {
-					parser.javascript.WriteString(string(s))
-					parser.javascript.WriteString("\n")
-				} else if s, err := dictionary.GetStream(string(key)); err == nil { // can this cause an infinite loop?
-					parser.javascript.WriteString(string(s))
-					parser.javascript.WriteString("\n")
-				}
-			}
-		} else if string(key) == "URI" {
-			if parser.urls != nil {
-				// dump urls
-				if s, err := dictionary.GetString(string(key)); err == nil {
-					parser.urls.WriteString(string(s))
-					parser.urls.WriteString("\n")
-				}
-			}
-		} else if string(key) == "A" || string(key) == "OpenAction" {
-			// TODO: handle actions
-		} else if string(key) == "AA" {
-			// TODO: handle additional actions
-		}
 
 		// stop if at eof or end of dictionary
 		if err == ErrorRead || err == EndOfDictionary {

@@ -12,7 +12,10 @@ type Font struct {
 	Width int
 }
 
-func NewFont(cmap []byte) *Font {
+func NewFont(d Dictionary) *Font {
+	cmap_string, _ := d.GetStream("ToUnicode")
+	cmap := []byte(cmap_string)
+
 	// create new font object
 	font := &Font{map[int16]string{}, 1}
 

@@ -87,6 +87,37 @@ func (d Dictionary) GetName(key string) (string, error) {
 	return "", NewError("Expected name")
 }
 
+func (d Dictionary) GetNameTreeMap(key string) Array {
+	if root, err := d.GetDictionary(key); err == nil {
+		return root.getNameTreeMap(map[int]interface{}{})
+	}
+	return Array{}
+}
+
+func (d Dictionary) getNameTreeMap(resolved_kids map[int]interface{}) Array {
+	nameTreeMap := Array{}
+	if names, err := d.GetArray("Names"); err == nil {
+		// append names to name tree map
+		nameTreeMap = append(nameTreeMap, names...)
+	}
+	if kids, err := d.GetArray("Kids"); err == nil {
+		for i := range kids {
+			// prevent infinite resolve reference loop
+			if r, ok := kids[i].(*Reference); ok {
+				if _, resolved := resolved_kids[r.Number]; resolved {
+					continue
+				}
+				resolved_kids[r.Number] = nil
+			}
+
+			// get child dictionary
+			kid, _ := kids.GetDictionary(i)
+			nameTreeMap = append(nameTreeMap, kid.getNameTreeMap(resolved_kids)...)
+		}
+	}
+	return nameTreeMap
+}
+
 func (d Dictionary) GetNumber(key string) (Number, error) {
 	object, err := d.GetObject(key)
 	if err != nil {
