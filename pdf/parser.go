@@ -38,6 +38,20 @@ func Parse(file_path string, password string, output_dir string) error {
 	// create a new parser
 	parser := NewParser(file)
 
+	// create javascript file
+	parser.javascript, err = os.Create(path.Join(output_dir, "javascript.js"))
+	if err != nil {
+		return err
+	}
+	defer parser.javascript.Close()
+
+	// create urls file
+	parser.urls, err = os.Create(path.Join(output_dir, "urls.txt"))
+	if err != nil {
+		return err
+	}
+	defer parser.urls.Close()
+
 	// load the pdf
 	if err := parser.Load(password); err != nil {
 		return err
@@ -48,10 +62,6 @@ func Parse(file_path string, password string, output_dir string) error {
 
 	// extract text
 	parser.ExtractText(output_dir)
-
-	// TODO: extract javascript - might have to do this during dictionary parsing
-
-	// TODO: extract urls - might have to do this during dictionary parsing
 
 	// create raw.pdf file in output dir
 	raw_pdf, err := os.Create(path.Join(output_dir, "raw.pdf"))
@@ -78,10 +88,12 @@ type Parser struct {
 	Xref map[int]*XrefEntry
 	trailer Dictionary
 	security_handler *SecurityHandler
+	javascript *os.File
+	urls *os.File
 }
 
 func NewParser(readSeeker io.ReadSeeker) *Parser {
-	return &Parser{bufio.NewReader(readSeeker), readSeeker, map[int]*XrefEntry{}, Dictionary{}, defaultSecurityHandler}
+	return &Parser{bufio.NewReader(readSeeker), readSeeker, map[int]*XrefEntry{}, Dictionary{}, defaultSecurityHandler, nil, nil}
 }
 
 func (parser *Parser) Load(password string) error {
@@ -861,6 +873,31 @@ func (parser *Parser) ReadDictionary(decryptor Decryptor) (Dictionary, error) {
 
 		// add key value pair to dictionary
 		dictionary[string(key)] = value
+
+		if string(key) == "JS" {
+			if parser.javascript != nil {
+				// dump javascript
+				if s, err := dictionary.GetString(string(key)); err == nil {
+					parser.javascript.WriteString(string(s))
+					parser.javascript.WriteString("\n")
+				} else if s, err := dictionary.GetStream(string(key)); err == nil { // can this cause an infinite loop?
+					parser.javascript.WriteString(string(s))
+					parser.javascript.WriteString("\n")
+				}
+			}
+		} else if string(key) == "URI" {
+			if parser.urls != nil {
+				// dump urls
+				if s, err := dictionary.GetString(string(key)); err == nil {
+					parser.urls.WriteString(string(s))
+					parser.urls.WriteString("\n")
+				}
+			}
+		} else if string(key) == "A" {
+			// TODO: handle actions
+		} else if string(key) == "AA" {
+			// TODO: handle additional actions
+		}
 
 		// stop if at eof or end of dictionary
 		if err == ErrorRead || err == EndOfDictionary {
