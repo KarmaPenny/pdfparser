@@ -893,7 +893,7 @@ func (parser *Parser) ReadDictionary(decryptor Decryptor) (Dictionary, error) {
 					parser.urls.WriteString("\n")
 				}
 			}
-		} else if string(key) == "A" {
+		} else if string(key) == "A" || string(key) == "OpenAction" {
 			// TODO: handle actions
 		} else if string(key) == "AA" {
 			// TODO: handle additional actions
