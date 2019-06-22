@@ -24,6 +24,10 @@ var whitespace = []byte("\x00\t\n\f\r ")
 var delimiters = []byte("()<>[]/%")
 
 func Parse(file_path string, password string, output_dir string) error {
+	// create output dir
+	os.RemoveAll(output_dir)
+	os.MkdirAll(output_dir, 0755)
+
 	// open the pdf
 	file, err := os.Open(file_path)
 	if err != nil {
