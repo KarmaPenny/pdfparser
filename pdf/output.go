@@ -23,6 +23,7 @@ type Output struct {
 func NewOutput(directory string) (output *Output, err error) {
 	// create new output object
 	output = &Output{}
+	output.Directory = directory
 
 	// create output dir
 	os.RemoveAll(directory)
