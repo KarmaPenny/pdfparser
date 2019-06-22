@@ -28,16 +28,14 @@ $(go env GOPATH)/bin/pdfparser input.pdf
 ```
 
 #### Library
-The following program extracts the contents of test.pdf to the output_dir directory using "password" for the encryption password:
+The following program extracts the contents of test.pdf to the output directory using "password" for decryption:
 ```go
 package main
 
-import (
-	"github.com/KarmaPenny/pdfparser/pdf"
-)
+import "github.com/KarmaPenny/pdfparser/pdf"
 
 func main() {
-	pdf.Parse("test.pdf", "password", "output_dir")
+	pdf.Parse("test.pdf", "password", "output")
 }
 ```
 
