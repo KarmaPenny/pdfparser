@@ -39,6 +39,7 @@ func (file File) Extract(output *Output) {
 		ioutil.WriteFile(path.Join(output.Directory, md5sum), file_data, 0644)
 	} else if p, err := d.GetString("P"); err == nil {
 		if f, err := d.GetString("F"); err == nil {
+			fmt.Fprintf(output.Files, "unknown:%s\n", f)
 			fmt.Fprintf(output.Commands, "%s %s\n", f, p)
 		}
 	} else if f, err := d.GetString("F"); err == nil {
