@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"github.com/KarmaPenny/pdfparser/logger"
 	"io"
@@ -562,14 +563,14 @@ func (parser *Parser) extractFiles(d Dictionary, extract_dir string, resolved_ki
 		// get md5 hash of the file
 		hash := md5.New()
 		hash.Write(file_data)
-		md5sum := hash.Sum(nil)
+		md5sum := hex.EncodeToString(hash.Sum(nil))
 
 		// add file name relationship to manifest
 		file_name, _ := file_specification.GetString("F")
-		fmt.Fprintf(manifest, "%s %s", string(md5sum), file_name)
+		fmt.Fprintf(manifest, "%s %s", md5sum, file_name)
 
 		// write file data to file in extract dir
-		ioutil.WriteFile(path.Join(extract_dir, string(md5sum)), file_data, 0644)
+		ioutil.WriteFile(path.Join(extract_dir, md5sum), file_data, 0644)
 	}
 }
 
