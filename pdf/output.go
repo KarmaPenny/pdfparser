@@ -24,6 +24,11 @@ func NewOutput(directory string) (output *Output, err error) {
 	os.RemoveAll(directory)
 	os.MkdirAll(directory, 0755)
 
+	// create commands file
+	if output.Commands, err = os.Create(path.Join(directory, "commands.txt")); err != nil {
+		return
+	}
+
 	// create errors file
 	if output.Errors, err = os.Create(path.Join(directory, "errors.txt")); err != nil {
 		return
