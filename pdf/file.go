@@ -4,21 +4,20 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"path"
 )
 
 type File Dictionary
 
-func (file File) Extract(file_output, url_output io.Writer, extract_dir string) {
+func (file File) Extract(output *Output) {
 	d := Dictionary(file)
 
 	// file specification can be a url or file
 	fs, _ := d.GetString("FS")
 	if string(fs) == "URL" {
 		if f, err := d.GetString("F"); err == nil {
-			fmt.Fprintln(url_output, string(f))
+			fmt.Fprintln(output.URLs, string(f))
 		}
 	} else if ef, err := d.GetDictionary("EF"); err == nil {
 		// get the file data
@@ -34,11 +33,15 @@ func (file File) Extract(file_output, url_output io.Writer, extract_dir string) 
 		if err != nil {
 			f = "unknown"
 		}
-		fmt.Fprintf(file_output, "%s:%s\n", md5sum, f)
+		fmt.Fprintf(output.Files, "%s:%s\n", md5sum, f)
 
 		// write file data to file in extract dir
-		ioutil.WriteFile(path.Join(extract_dir, md5sum), file_data, 0644)
+		ioutil.WriteFile(path.Join(output.Directory, md5sum), file_data, 0644)
+	} else if p, err := d.GetString("P"); err == nil {
+		if f, err := d.GetString("F"); err == nil {
+			fmt.Fprintf(output.Commands, "%s %s\n", f, p)
+		}
 	} else if f, err := d.GetString("F"); err == nil {
-		fmt.Fprintf(file_output, "unknown:%s\n", f)
+		fmt.Fprintf(output.Files, "unknown:%s\n", f)
 	}
 }

@@ -8,7 +8,7 @@ import (
 
 type Page Dictionary
 
-func (page Page) ExtractText(w io.Writer) {
+func (page Page) Extract(output *Output) {
 	d := Dictionary(page)
 
 	// load fonts
@@ -56,8 +56,8 @@ func (page Page) ExtractText(w io.Writer) {
 				} else if command == KEYWORD_TEXT_SHOW_1 || command == KEYWORD_TEXT_SHOW_2 || command == KEYWORD_TEXT_SHOW_3 {
 					// decode text with current font font
 					s, _ := operands.GetString(len(operands) - 1)
-					io.WriteString(w, current_font.Decode([]byte(s)))
-					io.WriteString(w, "\n")
+					io.WriteString(output.Text, current_font.Decode([]byte(s)))
+					io.WriteString(output.Text, "\n")
 				} else if command == KEYWORD_TEXT_POSITION {
 					// decode positioned text with current font
 					var sb strings.Builder
@@ -66,8 +66,8 @@ func (page Page) ExtractText(w io.Writer) {
 						s, _ := a.GetString(i)
 						sb.WriteString(string(s))
 					}
-					io.WriteString(w, current_font.Decode([]byte(sb.String())))
-					io.WriteString(w, "\n")
+					io.WriteString(output.Text, current_font.Decode([]byte(sb.String())))
+					io.WriteString(output.Text, "\n")
 				}
 			}
 		}
