@@ -16,10 +16,6 @@ func (a Action) Extract(output *Output) {
 		File(f).Extract(output)
 	}
 	if win, err := d.GetDictionary("Win"); err == nil {
-		if f, err := win.GetString("F"); err == nil {
-			fmt.Fprintf(output.Files, "unknown:%s\n", f)
-		} else if f, err := win.GetDictionary("F"); err == nil {
-			File(f).Extract(output)
-		}
+		File(win).Extract(output)
 	}
 }
