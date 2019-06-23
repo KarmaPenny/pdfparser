@@ -14,6 +14,11 @@ go get -u github.com/KarmaPenny/pdfparser
 go clean -i github.com/KarmaPenny/pdfparser && rm -rf $(go env GOPATH)/src/github.com/KarmaPenny/pdfparser
 ```
 
+#### Run unit tests with:
+```bash
+go test github.com/KarmaPenny/pdfparser
+```
+
 ## Usage
 #### Command Line
 The following command extracts the contents of input.pdf to the output directory using "password" for decryption:
@@ -31,9 +36,4 @@ import "github.com/KarmaPenny/pdfparser/pdf"
 func main() {
 	pdf.Parse("input.pdf", "password", "output")
 }
-```
-
-## Unit Testing
-```bash
-go test github.com/KarmaPenny/pdfparser
 ```
