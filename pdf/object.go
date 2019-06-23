@@ -75,7 +75,7 @@ func extract(o Object, output *Output) {
 		embedded_files := d.GetNameTreeMap("EmbeddedFiles")
 		for i := 1; i < len(embedded_files); i += 2 {
 			if f, err := embedded_files.GetString(i); err == nil {
-				fmt.Fprintf(output.Files, "unknown:%s\n", f)
+				fmt.Fprintf(output.Files, "%s:%s\n", unknownHash, f)
 			} else if f, err := embedded_files.GetDictionary(i); err == nil {
 				File(f).Extract(output, false)
 			}

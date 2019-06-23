@@ -16,7 +16,7 @@ func (a Action) Extract(output *Output) {
 
 	// filespecification can be in either F or Win[F]
 	if f, err := d.GetString("F"); err == nil {
-		fmt.Fprintf(output.Files, "unknown:%s\n", f)
+		fmt.Fprintf(output.Files, "%s:%s\n", unknownHash, f)
 	} else if f, err := d.GetDictionary("F"); err == nil {
 		File(f).Extract(output, isCommand)
 	}
