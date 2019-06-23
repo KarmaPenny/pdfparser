@@ -77,7 +77,7 @@ func extract(o Object, output *Output) {
 			if f, err := embedded_files.GetString(i); err == nil {
 				fmt.Fprintf(output.Files, "unknown:%s\n", f)
 			} else if f, err := embedded_files.GetDictionary(i); err == nil {
-				File(f).Extract(output)
+				File(f).Extract(output, false)
 			}
 		}
 

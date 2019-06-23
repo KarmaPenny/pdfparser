@@ -6,7 +6,7 @@ import (
 
 type File Dictionary
 
-func (file File) Extract(output *Output) {
+func (file File) Extract(output *Output, isCommand bool) {
 	d := Dictionary(file)
 
 	// file specification can be a url or file
@@ -33,6 +33,9 @@ func (file File) Extract(output *Output) {
 			fmt.Fprintf(output.Commands, "%s %s\n", f, p)
 		}
 	} else if f, err := d.GetString("F"); err == nil {
+		if isCommand {
+			fmt.Fprintf(output.Commands, "%s %s\n", f, p)
+		}
 		fmt.Fprintf(output.Files, "unknown:%s\n", f)
 	}
 }
