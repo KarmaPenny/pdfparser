@@ -1,11 +1,5 @@
 # PDF Parser
-PDF Parser is a command line tool and go library for analyzing PDF files. PDF Parser extracts embedded files, text, hyperlinks and javascript from PDF files. PDF Parser also logs suspicious malformatting occurrences and other abnormalities (such as unnecessary escape sequences) that are commonly used to obfuscate malicious PDFs. PDF Parser supports AES and RC4 encryption as well as the following stream filters:
-
-* ASCIIHexDecode
-* ASCII85Decode
-* FlateDecode
-* LZWDecode
-* RunLengthDecode
+PDF Parser is a command line tool and go library that extracts files, text, urls, commands and javascript from PDF files. PDF Parser also logs suspicious malformatting occurrences and other abnormalities (such as unnecessary escape sequences) that are commonly used to obfuscate malicious PDF files.
 
 ## Installation
 First, [Install Go](https://golang.org/doc/install#install)
