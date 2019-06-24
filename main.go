@@ -36,7 +36,7 @@ func init() {
 
 func main() {
 	// check if output directory already exists
-	if _, err := os.Stat(*extract_dir); !os.IsNotExist(err) {
+	if _, err := os.Stat(*extract_dir); !os.IsNotExist(err) && !*overwrite {
 		fmt.Printf("output directory \"%s\" already exists, use -f to overwrite\n", *extract_dir)
 		return
 	}
