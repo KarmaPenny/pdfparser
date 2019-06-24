@@ -21,7 +21,7 @@ func Parse(file_path string, password string, output_dir string) error {
 	}
 
 	// create a new parser
-	parser := NewParser(file)
+	parser := NewParser(file, output)
 
 	// load the pdf
 	if err := parser.Load(password); err != nil {

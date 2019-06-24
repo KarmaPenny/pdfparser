@@ -102,3 +102,9 @@ func (output *Output) DumpFile(name string, data []byte) {
 	// write file data to file in extract dir
 	ioutil.WriteFile(path.Join(output.Directory, md5sum), data, 0644)
 }
+
+func (output *Output) Error(message string) {
+	if output.Errors != nil {
+		fmt.Fprintln(output.Errors, message)
+	}
+}

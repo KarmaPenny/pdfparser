@@ -23,10 +23,11 @@ type Parser struct {
 	Xref map[int]*XrefEntry
 	trailer Dictionary
 	security_handler *SecurityHandler
+	output *Output
 }
 
-func NewParser(readSeeker io.ReadSeeker) *Parser {
-	return &Parser{bufio.NewReader(readSeeker), readSeeker, map[int]*XrefEntry{}, Dictionary{}, NewSecurityHandler()}
+func NewParser(readSeeker io.ReadSeeker, output *Output) *Parser {
+	return &Parser{bufio.NewReader(readSeeker), readSeeker, map[int]*XrefEntry{}, Dictionary{}, NewSecurityHandler(), output}
 }
 
 func (parser *Parser) Load(password string) error {
@@ -573,7 +574,11 @@ func (parser *Parser) ReadArray(decryptor Decryptor) Array {
 	// read in elements and append to array
 	for {
 		element, err := parser.ReadObject(decryptor)
-		if err == ReadError || err == EndOfArray {
+		if err == ReadError {
+			parser.log_error(UnclosedArray)
+			break
+		}
+		if err == EndOfArray {
 			break
 		}
 		array = append(array, element)
@@ -616,19 +621,25 @@ func (parser *Parser) ReadDictionary(decryptor Decryptor) Dictionary {
 	for {
 		// read next object
 		name, err := parser.ReadObject(decryptor)
-		if err == ReadError || err == EndOfDictionary {
+		if err == ReadError {
+			parser.log_error(UnclosedDictionary)
+			break
+		}
+		if err == EndOfDictionary {
 			break
 		}
 
 		// skip if not a name
 		key, ok := name.(Name)
 		if !ok {
+			parser.log_error(InvalidDictionaryKeyType)
 			continue
 		}
 
 		// get value
 		value, err := parser.ReadObject(decryptor)
 		if err == ReadError || err == EndOfDictionary {
+			parser.log_error(MissingDictionaryValue)
 			break
 		}
 
@@ -658,6 +669,9 @@ func (parser *Parser) ReadHexString(decryptor Decryptor) String {
 			parser.consumeWhitespace()
 			b, err := parser.ReadByte()
 			if err != nil || b == '>' {
+				if err != nil {
+					parser.log_error(UnclosedHexString)
+				}
 				if i > 0 {
 					val, _ := strconv.ParseUint(string(code), 16, 8)
 					s.WriteByte(byte(val))
@@ -665,6 +679,7 @@ func (parser *Parser) ReadHexString(decryptor Decryptor) String {
 				return String(decryptor.Decrypt([]byte(s.String())))
 			}
 			if !IsHex(b) {
+				parser.log_error(InvalidHexStringChar)
 				continue
 			}
 			code[i] = b
@@ -781,6 +796,7 @@ func (parser *Parser) ReadName() Name {
 					break
 				}
 				if !IsHex(b) {
+					parser.log_error(InvalidNameEscapeChar)
 					parser.UnreadByte()
 					break
 				}
@@ -790,6 +806,11 @@ func (parser *Parser) ReadName() Name {
 			// convert the hex code to a byte
 			val, _ := strconv.ParseUint(string(code), 16, 8)
 			b = byte(val)
+
+			// if b did not need to be escaped
+			if b >= '!' && b <= '~' && b != '#' && bytes.IndexByte(delimiters, b) < 0 {
+				parser.log_error(UnnecessaryEscapeName)
+			}
 		}
 
 		// add byte to name
@@ -932,6 +953,7 @@ func (parser *Parser) ReadStream(decryptor Decryptor, filter_list Array, decode_
 		// add next byte of stream to end_buff
 		b, err = parser.ReadByte()
 		if err != nil {
+			parser.log_error(UnclosedStream)
 			stream_data.Write(end_buff.Bytes())
 			break
 		}
@@ -978,6 +1000,7 @@ func (parser *Parser) ReadString(decryptor Decryptor) String {
 		// read next byte
 		b, err = parser.ReadByte()
 		if err != nil {
+			parser.log_error(UnclosedString)
 			return String(decryptor.Decrypt([]byte(s.String())))
 		}
 
@@ -986,6 +1009,7 @@ func (parser *Parser) ReadString(decryptor Decryptor) String {
 			// read next byte
 			b, err = parser.ReadByte()
 			if err != nil {
+				parser.log_error(UnclosedStringEscape)
 				s.WriteByte('\\')
 				return String(decryptor.Decrypt([]byte(s.String())))
 			}
@@ -998,6 +1022,7 @@ func (parser *Parser) ReadString(decryptor Decryptor) String {
 				// read next byte
 				b, err = parser.ReadByte()
 				if err != nil {
+					parser.log_error(UnclosedStringEscape)
 					return String(decryptor.Decrypt([]byte(s.String())))
 				}
 				// if byte is not a new line then unread it
@@ -1030,6 +1055,7 @@ func (parser *Parser) ReadString(decryptor Decryptor) String {
 					// read next byte
 					b, err = parser.ReadByte()
 					if err != nil {
+						parser.log_error(UnclosedStringOctal)
 						break
 					}
 
@@ -1048,10 +1074,16 @@ func (parser *Parser) ReadString(decryptor Decryptor) String {
 				val, err := strconv.ParseUint(string(code.Bytes()), 8, 8)
 				if err != nil {
 					// octal code is too large so ignore last byte
+					parser.log_error(InvalidOctal)
 					parser.UnreadByte()
 					val, _ = strconv.ParseUint(string(code.Bytes()[:code.Len()-1]), 8, 8)
 				}
 				b = byte(val)
+
+				// if b did not need to be escaped
+				if b >= '!' && b <= '~' && b != '\\' && b != '(' && b != ')' {
+					parser.log_error(UnnecessaryEscapeString)
+				}
 			}
 
 			// add byte to string and continue
@@ -1123,5 +1155,11 @@ func (parser *Parser) consumeComment() {
 			}
 			return
 		}
+	}
+}
+
+func (parser *Parser) log_error(message string) {
+	if parser.output != nil {
+		parser.output.Error(message)
 	}
 }

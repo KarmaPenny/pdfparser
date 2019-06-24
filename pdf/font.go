@@ -20,7 +20,7 @@ func NewFont(d Dictionary) *Font {
 	font := &Font{map[int16]string{}, 1}
 
 	// create parser for parsing cmap
-	parser := NewParser(bytes.NewReader(cmap))
+	parser := NewParser(bytes.NewReader(cmap), nil)
 
 	for {
 		// read next command

@@ -24,7 +24,7 @@ func (page Page) Extract(output *Output) {
 	contents, _ := d.GetStream("Contents")
 
 	// create parser for parsing contents
-	page_parser := NewParser(bytes.NewReader(contents))
+	page_parser := NewParser(bytes.NewReader(contents), nil)
 
 	for {
 		// read next command
