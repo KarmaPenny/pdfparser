@@ -7,6 +7,7 @@ import (
 	"os"
 )
 
+var overwrite *bool
 var password *string
 var extract_dir *string
 
@@ -19,6 +20,7 @@ func usage() {
 }
 
 func init() {
+	overwrite = flag.Bool("f", false, "overwrite of output directory if it already exists")
 	password = flag.String("p", "", "encryption password (default: empty)")
 	extract_dir = flag.String("o", "", "output directory (default: [input.pdf].extracted)")
 	flag.Usage = usage
@@ -33,8 +35,14 @@ func init() {
 }
 
 func main() {
-	err := pdf.Parse(flag.Arg(0), *password, *extract_dir)
-	if err != nil {
+	// check if output directory already exists
+	if _, err := os.Stat(*extract_dir); !os.IsNotExist(err) {
+		fmt.Printf("output directory \"%s\" already exists, use -f to overwrite\n", *extract_dir)
+		return
+	}
+
+	// parse the pdf
+	if err := pdf.Parse(flag.Arg(0), *password, *extract_dir); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 	}
 }
