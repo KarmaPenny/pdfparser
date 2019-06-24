@@ -40,10 +40,58 @@ func main() {
 
 ## Output
 PDF parser creates the following files in the output directory:
-* *commands.txt* - New line separated list of commands run by launch actions.
-* *contents.html* - Text content of the PDF.
-* *errors.txt* - Log of malformaties and other abnormalities.
-* *files.txt* - Manifest of embedded and external files. Each line contains an MD5 hash followed by a file path separated by a colon. Embedded files are extracted to the output directory using the MD5 hash as the file name. The MD5 hash for external files is all zeros.
-* *javascript.js* - The javascript from all actions in the PDF
-* *raw.pdf* - A decrypted and decoded version of the PDF
-* *urls.txt* - New line separated list of URLs referenced by actions
+* commands.txt
+* contents.html
+* errors.txt
+* files.txt
+* javascript.js
+* raw.pdf
+* urls.txt
+
+#### commands.txt
+Commands run by launch actions are logged to the commands.txt file. Each command is written to a new line. Example:
+```
+cmd.exe /c hello.exe
+calc.exe
+```
+
+#### contents.html
+The text content of the PDF is written to the contents.html file.
+
+#### errors.txt
+Format errors and other abnormailites that are sometimes used to obfuscate malicious PDF files are logged to the errors.txt file. Bellow is an example errors.txt file containing the complete list of possible log messages:
+```
+invalid dictionary key type
+invalid hex string character
+invalid name escape character
+invalid octal in string
+missing dictionary value
+unclosed array
+unclosed dictionary
+unclosed hex string
+unclosed stream
+unclosed string
+unclosed escape in string
+unclosed octal in string
+unnecessary espace sequence in name
+unnecessary espace sequence in string
+```
+#### files.txt
+The MD5 hash and file path of referenced embedded and external files are logged to the files.txt file. Embedded files are extracted to the output directory using the MD5 hash as the file name. The MD5 hash for external files is all zeros. Example:
+```
+6adb6f85e541f14d7ecec12a6af8ef65:hello.exe
+00000000000000000000000000000000:C:\Windows\System32\calc.exe
+```
+
+#### javascript.js
+The javascript of all actions is extracted to the javascript.js file.
+
+#### raw.pdf
+A decrypted and decoded version of the PDF is written to the raw.pdf file.
+
+#### urls.txt
+All URLs referenced by actions are extracted to the urls.txt file. Example:
+```
+http://www.google.com
+https://github.com/KarmaPenny
+```
