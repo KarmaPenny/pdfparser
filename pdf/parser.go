@@ -522,6 +522,7 @@ func (parser *Parser) ReadObject(decryptor Decryptor) (Object, error) {
 		return parser.ReadString(decryptor), nil
 	}
 	if b[0] == ')' {
+		parser.Discard(1)
 		return KEYWORD_NULL, EndOfString
 	}
 
@@ -539,6 +540,7 @@ func (parser *Parser) ReadObject(decryptor Decryptor) (Object, error) {
 		return parser.ReadHexString(decryptor), nil
 	}
 	if b[0] == '>' {
+		parser.Discard(1)
 		return KEYWORD_NULL, EndOfHexString
 	}
 
@@ -606,7 +608,7 @@ func (parser *Parser) ReadCommand() (Keyword, Array, error) {
 	for {
 		operand, err := parser.ReadObject(noDecryptor)
 		if err != nil {
-			return KEYWORD_NULL, operands, ReadError
+			return KEYWORD_NULL, operands, err
 		}
 		if keyword, ok := operand.(Keyword); ok {
 			return keyword, operands, nil
