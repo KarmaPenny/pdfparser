@@ -23,7 +23,7 @@ go test github.com/KarmaPenny/pdfparser/pdf
 #### Command Line
 The following command extracts the contents of input.pdf to the output directory using "password" for decryption:
 ```bash
-go run github.com/KarmaPenny/pdfparser -o output -p password input.pdf
+$(go env GOPATH)/bin/pdfparser -o output -p password input.pdf
 ```
 
 #### Library
