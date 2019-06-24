@@ -11,8 +11,9 @@ type XrefEntry struct {
 	Generation int
 	Type int
 	IsEncrypted bool
+	IsXrefStream bool
 }
 
 func NewXrefEntry(offset int64, generation int, type_value int) *XrefEntry {
-	return &XrefEntry{offset, generation, type_value, true}
+	return &XrefEntry{offset, generation, type_value, true, false}
 }

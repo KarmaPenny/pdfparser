@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"io"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -32,7 +33,18 @@ func (parser *Parser) Load(password string) error {
 	// find location of all xref tables
 	xref_offsets := parser.FindXrefOffsets()
 
-	// add start xref offset to xref offsets
+	// find location of all objects
+	objects := parser.FindObjects()
+
+	// add xref stream offsets to xref offsets then sort first to last
+	for _, object := range objects {
+		if object.IsXrefStream {
+			xref_offsets = append(xref_offsets, object.Offset)
+		}
+	}
+	sort.Slice(xref_offsets, func(i, j int) bool { return xref_offsets[i] < xref_offsets[j] })
+
+	// add start xref offset as last entry in xref_offsets so it overrides xref entries
 	if start_xref_offset, err := parser.GetStartXrefOffset(); err == nil {
 		xref_offsets = append(xref_offsets, start_xref_offset)
 	}
@@ -41,9 +53,6 @@ func (parser *Parser) Load(password string) error {
 	for i := range xref_offsets {
 		parser.LoadXref(xref_offsets[i], map[int64]interface{}{})
 	}
-
-	// find location of all objects
-	objects := parser.FindObjects()
 
 	// repair broken and missing xref entries
 	for object_number, object := range objects {
@@ -124,6 +133,14 @@ func (parser *Parser) FindObjects() map[int]*XrefEntry {
 
 		// add xref entry
 		objects[n] = NewXrefEntry(offset + int64(index[0]), g, XrefTypeIndirectObject)
+
+		// determine if object is xref stream
+		if d, err := parser.ReadDictionary(noDecryptor); err == nil {
+			if t, err := d.GetName("Type"); err == nil && t == "XRef" {
+				objects[n].IsXrefStream = true
+				objects[n].IsEncrypted = false
+			}
+		}
 
 		// seek to end of object start marker
 		offset, _ = parser.Seek(offset + int64(index[1]), io.SeekStart)
