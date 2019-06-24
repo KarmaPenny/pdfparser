@@ -16,14 +16,14 @@ go clean -i github.com/KarmaPenny/pdfparser && rm -rf $(go env GOPATH)/src/githu
 
 #### Run unit tests with:
 ```bash
-go test github.com/KarmaPenny/pdfparser
+go test github.com/KarmaPenny/pdfparser/pdf
 ```
 
 ## Usage
 #### Command Line
 The following command extracts the contents of input.pdf to the output directory using "password" for decryption:
 ```bash
-$(go env GOPATH)/bin/pdfparser -o output -p password input.pdf
+go run github.com/KarmaPenny/pdfparser -o output -p password input.pdf
 ```
 
 #### Library
