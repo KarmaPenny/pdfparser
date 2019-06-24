@@ -276,6 +276,8 @@ func (parser *Parser) loadXrefTable(offsets map[int64]interface{}) {
 }
 
 func (parser *Parser) loadXrefStream(n int, offsets map[int64]interface{}) {
+	xref_stream_offset := parser.CurrentOffset()
+
 	// Get the xref stream object
 	object := parser.GetObject(n)
 
@@ -359,6 +361,10 @@ func (parser *Parser) loadXrefStream(n int, offsets map[int64]interface{}) {
 			parser.Xref[object_number] = NewXrefEntry(offset, generation, xref_type)
 		}
 	}
+
+	// dont decrypt xref streams
+	parser.Xref[object.Number] = NewXrefEntry(xref_stream_offset, object.Generation, XrefTypeIndirectObject)
+	parser.Xref[object.Number].IsEncrypted = false
 }
 
 func (parser *Parser) GetObject(number int) *IndirectObject {
@@ -377,7 +383,7 @@ func (parser *Parser) GetObject(number int) *IndirectObject {
 
 			// initialize string decryption filter
 			var string_filter CryptFilter = noFilter
-			if parser.security_handler != nil {
+			if parser.security_handler != nil && xref_entry.IsEncrypted {
 				string_filter = parser.security_handler.string_filter
 			}
 			string_decryptor := string_filter.NewDecryptor(number, object.Generation)
