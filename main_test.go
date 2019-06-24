@@ -306,8 +306,10 @@ func TestMalformedDictionaryKey(test *testing.T) {
 	object := PDF.GetObject(1)
 
 	// assert value is correct
-	if object.Value.String() != "<</MalformedReference 45/HiddenObject (Hello World)>>" {
-		test.Fatalf("incorrect value %s", object.Value.String())
+	if d, ok := object.Value.(pdf.Dictionary); ok {
+		if hidden, err := d.GetString("HiddenObject"); err != nil && string(hidden) != "Hello World" {
+			test.Fatalf("incorrect value %s", string(hidden))
+		}
 	}
 }
 

@@ -3,7 +3,6 @@ package pdf
 import (
 	"errors"
 	"fmt"
-	"github.com/KarmaPenny/pdfparser/logger"
 	"runtime/debug"
 )
 
@@ -24,7 +23,6 @@ func NewError(format string, a ...interface{}) *Error {
 	if len(a) > 0 {
 		message = fmt.Sprintf(format, a...)
 	}
-	//logger.Debug(message)
 	return &Error{message, debug.Stack()}
 }
 
@@ -44,14 +42,10 @@ func WrapError(err error, format string, a ...interface{}) *Error {
 	e.message = fmt.Sprintf("%s: %s", wrap, e.message)
 
 	// return new error
-	//logger.Debug(e.message)
 	return e
 }
 
 // implement error interface
 func (err *Error) Error() string {
-	if *logger.Verbose {
-		return fmt.Sprintf("%s\n%s", err.message, string(err.trace))
-	}
-	return err.message
+	return fmt.Sprintf("%s\n%s", err.message, string(err.trace))
 }

@@ -3,7 +3,6 @@ package pdf
 import (
 	"bufio"
 	"bytes"
-	"github.com/KarmaPenny/pdfparser/logger"
 	"io"
 	"regexp"
 	"strconv"
@@ -31,27 +30,22 @@ func NewParser(readSeeker io.ReadSeeker) *Parser {
 
 func (parser *Parser) Load(password string) error {
 	// find location of all xref tables
-	logger.Debug("finding xref offsets")
 	xref_offsets := parser.FindXrefOffsets()
 
 	// add start xref offset to xref offsets
-	logger.Debug("finding startxref offsets")
 	if start_xref_offset, err := parser.GetStartXrefOffset(); err == nil {
 		xref_offsets = append(xref_offsets, start_xref_offset)
 	}
 
 	// load all xrefs
-	logger.Debug("loading xrefs")
 	for i := range xref_offsets {
 		parser.LoadXref(xref_offsets[i], map[int64]interface{}{})
 	}
 
 	// find location of all objects
-	logger.Debug("finding objects")
 	objects := parser.FindObjects()
 
 	// repair broken and missing xref entries
-	logger.Debug("repairing xrefs")
 	for object_number, object := range objects {
 		if xref_entry, ok := parser.Xref[object_number]; ok {
 			// replace xref entry if it does not point to an object or points to the wrong object
@@ -67,7 +61,6 @@ func (parser *Parser) Load(password string) error {
 
 	// setup security handler if pdf is encrypted
 	if encrypt, ok := parser.trailer["Encrypt"]; ok {
-		logger.Debug("pdf is encrypted")
 		// make sure we don't decrypt the encryption dictionary
 		if ref, ok := encrypt.(*Reference); ok {
 			if xref_entry, ok := parser.Xref[ref.Number]; ok {
@@ -77,7 +70,6 @@ func (parser *Parser) Load(password string) error {
 
 		// set the password
 		if !parser.SetPassword(password) {
-			logger.Debug("incorrect password")
 			return ErrorPassword
 		}
 	}
@@ -370,8 +362,6 @@ func (parser *Parser) LoadXrefStream(n int, offsets map[int64]interface{}) error
 }
 
 func (parser *Parser) GetObject(number int) *IndirectObject {
-	logger.Debug("Reading object %d", number)
-
 	object := NewIndirectObject(number)
 
 	if xref_entry, ok := parser.Xref[number]; ok {
@@ -393,12 +383,10 @@ func (parser *Parser) GetObject(number int) *IndirectObject {
 			string_decryptor := string_filter.NewDecryptor(number, object.Generation)
 
 			// get the value of the object
-			logger.Debug("Reading object value")
 			object.Value, _ = parser.ReadObject(string_decryptor)
 
 			// get next keyword
 			if keyword := parser.ReadKeyword(); keyword == KEYWORD_STREAM {
-				logger.Debug("Reading object stream")
 				// get stream dictionary
 				d, ok := object.Value.(Dictionary)
 				if !ok {

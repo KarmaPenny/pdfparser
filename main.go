@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/KarmaPenny/pdfparser/pdf"
-	"github.com/KarmaPenny/pdfparser/logger"
 	"os"
 )
 
@@ -24,7 +23,6 @@ func main() {
 
 // parse cmd args
 func parse_args() {
-	logger.Verbose = flag.Bool("v", false, "display verbose messages")
 	password = flag.String("p", "", "encryption password (default: empty)")
 	extract_dir = flag.String("o", "", "output directory (default: [input.pdf].extracted)")
 	flag.Usage = usage
