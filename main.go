@@ -16,7 +16,10 @@ func main() {
 	parse_args()
 
 	// parse the pdf
-	pdf.Parse(flag.Arg(0), *password, *extract_dir)
+	err := pdf.Parse(flag.Arg(0), *password, *extract_dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+	}
 }
 
 // parse cmd args

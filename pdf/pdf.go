@@ -13,18 +13,18 @@ func Parse(file_path string, password string, output_dir string) error {
 	}
 	defer file.Close()
 
+	// create output directory and files
+	output, err := NewOutput(output_dir)
+	defer output.Close()
+	if err != nil {
+		return err
+	}
+
 	// create a new parser
 	parser := NewParser(file)
 
 	// load the pdf
 	if err := parser.Load(password); err != nil {
-		return err
-	}
-
-	// create output directory and files
-	output, err := NewOutput(output_dir)
-	defer output.Close()
-	if err != nil {
 		return err
 	}
 
