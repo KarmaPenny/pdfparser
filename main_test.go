@@ -450,9 +450,9 @@ func TestReferenceNull(test *testing.T) {
 	}
 }
 
-func TestStreamCarriageReturn(test *testing.T) {
+func TestCarriageReturn(test *testing.T) {
 	// open the pdf
-	f, err := openTestPdf("stream_carriage_return.pdf")
+	f, err := openTestPdf("carriage_return.pdf")
 	if err != nil {
 		test.Fatal(err)
 	}

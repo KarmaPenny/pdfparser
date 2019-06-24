@@ -12,7 +12,7 @@ import (
 
 var start_xref_scan_buffer_size int64 = 256
 var start_xref_regexp = regexp.MustCompile(`startxref\s*(\d+)\s*%%EOF`)
-var start_obj_regexp = regexp.MustCompile(`\d+([\s\x00]|(%[^\n]*\n))+\d+([\s\x00]|(%[^\n]*\n))+obj`)
+var start_obj_regexp = regexp.MustCompile(`\d+([\s\x00]|(%[^\r\n]*))+\d+([\s\x00]|(%[^\r\n]*))+obj`)
 var xref_regexp = regexp.MustCompile(`xref`)
 var whitespace = []byte("\x00\t\n\f\r ")
 var delimiters = []byte("()<>[]/%")
