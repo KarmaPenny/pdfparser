@@ -312,6 +312,44 @@ func TestMalformedDictionaryKey(test *testing.T) {
 	}
 }
 
+func TestMaxCmapSize(test *testing.T) {
+	// create a done signal channel
+	done := make(chan bool, 1)
+
+	// run test in background
+	go func() {
+		// send done signal when returning
+		defer func() {done <- true}()
+
+		// open the pdf
+		f, err := openTestPdf("max_cmap_size.pdf")
+		if err != nil {
+			test.Fatal(err)
+		}
+		defer f.Close()
+
+		// load the pdf
+		parser := NewParser(f, nil)
+		err = parser.Load("")
+		if err != nil {
+			test.Fatal(err)
+		}
+
+		// read the object
+		object := parser.GetObject(1)
+		if d, ok := object.Value.(Dictionary); ok {
+			NewFont(d)
+		}
+	}()
+
+	// wait until done or timed out
+	select {
+		case <-done:
+		case <-time.After(time.Second):
+			test.Fatal("timed out")
+	}
+}
+
 func TestNames(test *testing.T) {
 	// open the pdf
 	f, err := openTestPdf("names.pdf")

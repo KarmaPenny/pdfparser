@@ -5,10 +5,10 @@ import (
 	"strings"
 )
 
-var FontDefault *Font = &Font{map[int16]string{}, 1}
+var FontDefault *Font = &Font{map[int]string{}, 1}
 
 type Font struct {
-	Cmap map[int16]string
+	Cmap map[int]string
 	Width int
 }
 
@@ -17,7 +17,7 @@ func NewFont(d Dictionary) *Font {
 	cmap := []byte(cmap_string)
 
 	// create new font object
-	font := &Font{map[int16]string{}, 1}
+	font := &Font{map[int]string{}, 1}
 
 	// create parser for parsing cmap
 	parser := NewParser(bytes.NewReader(cmap), nil)
@@ -37,21 +37,21 @@ func NewFont(d Dictionary) *Font {
 					break
 				}
 				font.Width = len([]byte(start_b))
-				start := BytesToInt16([]byte(start_b))
+				start := BytesToInt([]byte(start_b))
 
 				end_b := parser.ReadHexString(noDecryptor)
 				if end_b == "" {
 					break
 				}
-				end := BytesToInt16([]byte(end_b))
+				end := BytesToInt([]byte(end_b))
 
 				value := parser.ReadHexString(noDecryptor)
 				if value == "" {
 					break
 				}
 
-				for i := start; i <= end; i++ {
-					font.Cmap[i] = string(value)
+				for j := start; j <= end; j++ {
+					font.Cmap[j] = string(value)
 				}
 			}
 		} else if command == KEYWORD_BEGIN_BF_CHAR {
@@ -62,7 +62,7 @@ func NewFont(d Dictionary) *Font {
 					break
 				}
 				font.Width = len([]byte(key_b))
-				key := BytesToInt16([]byte(key_b))
+				key := BytesToInt([]byte(key_b))
 
 				value := parser.ReadHexString(noDecryptor)
 				if value == "" {
@@ -81,7 +81,7 @@ func (font *Font) Decode(b []byte) string {
 	var s strings.Builder
 	for i := 0; i + font.Width <= len(b); i += font.Width {
 		bs := b[i:i + font.Width]
-		k := BytesToInt16(bs)
+		k := BytesToInt(bs)
 		if v, ok := font.Cmap[k]; ok {
 			s.WriteString(v)
 		} else {

@@ -24,6 +24,7 @@ func Parse(file_path string, password string, output_dir string) error {
 	parser := NewParser(file, output)
 
 	// load the pdf
+	Debug("Loading xref")
 	if err := parser.Load(password); err != nil {
 		return err
 	}
@@ -31,6 +32,7 @@ func Parse(file_path string, password string, output_dir string) error {
 	// extract and dump all objects
 	for object_number, xref_entry := range parser.Xref {
 		if xref_entry.Type == XrefTypeIndirectObject {
+			Debug("Extracting object %d", object_number)
 			object := parser.GetObject(object_number)
 			object.Extract(output)
 			fmt.Fprintln(output.Raw, object.String())

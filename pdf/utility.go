@@ -56,11 +56,11 @@ func SetBits(d []byte, p int, n int, v uint32) {
 	}
 }
 
-func BytesToInt16(b []byte) int16 {
-	val := int16(0)
+func BytesToInt(b []byte) int {
+	val := 0
 	for i := range b {
 		val *= 256
-		val += int16(b[i])
+		val += int(b[i])
 	}
 	return val
 }

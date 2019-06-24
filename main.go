@@ -20,6 +20,7 @@ func usage() {
 }
 
 func init() {
+	pdf.Verbose = flag.Bool("v", false, "display verbose messages")
 	overwrite = flag.Bool("f", false, "overwrite of output directory if it already exists")
 	password = flag.String("p", "", "encryption password (default: empty)")
 	extract_dir = flag.String("o", "", "output directory (default: [input.pdf].extracted)")
