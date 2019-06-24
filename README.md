@@ -40,16 +40,9 @@ func main() {
 
 ## Output
 PDF parser creates the following files in the output directory:
-* commands.txt
-* contents.html
-* errors.txt
-* files.txt
-* javascript.js
-* raw.pdf
-* urls.txt
 
 #### commands.txt
-Commands run by launch actions are logged to the commands.txt file. Each command is written to a new line. Example:
+Commands run by launch actions are logged to the commands.txt file. Example:
 ```
 cmd.exe /c hello.exe
 calc.exe
