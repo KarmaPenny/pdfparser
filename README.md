@@ -37,3 +37,13 @@ func main() {
 	pdf.Parse("input.pdf", "password", "output")
 }
 ```
+
+## Output
+PDF parser creates the following files in the output directory:
+* **commands.txt** - New line separated list of commands run by launch actions.
+* **contents.txt** - Text content of the PDF.
+* **errors.txt** - Log of malformaties and other abnormalities.
+* **files.txt** - Manifest of embedded and external files. Each line contains an MD5 hash followed by a file path separated by a colon. Embedded files are extracted to the output directory using the MD5 hash as the file name. The MD5 hash for external files is all zeros.
+* **javascript.js** - The javascript from all actions in the PDF
+* **raw.pdf** - A decrypted and decoded version of the PDF
+* **urls.txt** - New line separated list of URLs referenced by actions
