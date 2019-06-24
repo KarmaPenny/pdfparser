@@ -29,7 +29,7 @@ func (page Page) Extract(output *Output) {
 	for {
 		// read next command
 		command, _, err := page_parser.ReadCommand()
-		if err == ErrorRead {
+		if err == ReadError {
 			break
 		}
 
@@ -41,7 +41,7 @@ func (page Page) Extract(output *Output) {
 			for {
 				command, operands, err := page_parser.ReadCommand()
 				// stop if end of stream or end of text block
-				if err == ErrorRead || command == KEYWORD_TEXT_END {
+				if err == ReadError || command == KEYWORD_TEXT_END {
 					break
 				}
 

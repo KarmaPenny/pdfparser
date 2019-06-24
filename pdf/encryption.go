@@ -10,9 +10,7 @@ import (
 
 var padding_string []byte = []byte("\x28\xBF\x4E\x5E\x4E\x75\x8A\x41\x64\x00\x4E\x56\xFF\xFA\x01\x08\x2E\x2E\x00\xB6\xD0\x68\x3E\x80\x2F\x0C\xA9\xFE\x64\x53\x69\x7A")
 var noFilter = &CryptFilterNone{}
-var noDecryptor = &DecryptorNone{}
-var defaultSecurityHandler = &SecurityHandler{0, 0, 0, nil, nil, nil, true, nil, noFilter, noFilter, noFilter, map[string]CryptFilter{}, nil}
-
+var noDecryptor = &DecryptorNone{} 
 type CryptFilter interface {
 	NewDecryptor(int, int) Decryptor
 }
@@ -155,47 +153,48 @@ type SecurityHandler struct {
 	encryption_key []byte
 }
 
-func NewSecurityHandler(password []byte, trailer Dictionary) (*SecurityHandler, error) {
+func NewSecurityHandler() *SecurityHandler {
 	sh := &SecurityHandler{}
+	sh.stream_filter = noFilter
+	sh.string_filter = noFilter
+	sh.file_filter = noFilter
+	sh.crypt_filters = map[string]CryptFilter{}
+	return sh
+}
 
-	// get the encrypt dictionary
-	encrypt, err := trailer.GetDictionary("Encrypt")
-	if err != nil {
-		return sh, NewError("Encrypt dictionary not found")
+func (sh *SecurityHandler) Init(password []byte, trailer Dictionary) error {
+	var ok bool = false
+
+	// get encryption dictionary
+	encrypt, ok := trailer.GetDictionary("Encrypt")
+	if !ok {
+		return EncryptionError
 	}
 
 	// get filter
-	filter, err := encrypt.GetName("Filter")
-	if err != nil {
-		return sh, NewError("Encrypt dictionary missing required Filter field")
-	}
-
-	// filter is not supported
+	filter, _ := encrypt.GetName("Filter")
 	if filter != "Standard" {
-		return sh, NewError("Unsupported encryption filter")
+		return EncryptionUnsupported
 	}
 
 	// get V
 	sh.v, _ = encrypt.GetInt("V")
 	if sh.v != 1 && sh.v != 2 && sh.v != 4 {
-		return sh, NewError("Unsupported encryption version")
+		return EncryptionUnsupported
 	}
 
 	// get R
-	sh.r, err = encrypt.GetInt("R")
-	if err != nil {
-		return sh, NewError("Encrypt dictionary missing required R field")
-	}
+	sh.r, _ = encrypt.GetInt("R")
 	if sh.r < 2 || sh.r > 4 {
-		return sh, NewError("Unsupported encryption revision")
+		return EncryptionUnsupported
 	}
 
 	// get Length
 	if sh.v == 1 {
 		sh.length = 40
 	} else {
-		sh.length, err = encrypt.GetInt("Length")
-		if err != nil {
+		sh.length, ok = encrypt.GetInt("Length")
+		if !ok {
 			sh.length = 40
 		}
 	}
@@ -207,39 +206,39 @@ func NewSecurityHandler(password []byte, trailer Dictionary) (*SecurityHandler, 
 	}
 
 	// get O
-	sh.o, err = encrypt.GetBytes("O")
-	if err != nil {
-		return sh, NewError("Encrypt dictionary missing required O field")
+	sh.o, ok = encrypt.GetBytes("O")
+	if !ok {
+		return EncryptionError
 	}
 
 	// get U
-	sh.u, err = encrypt.GetBytes("U")
-	if err != nil {
-		return sh, NewError("Encrypt dictionary missing required U field")
+	sh.u, ok = encrypt.GetBytes("U")
+	if !ok {
+		return EncryptionError
 	}
 
 	// get P
-	p, err := encrypt.GetInt("P")
-	if err != nil {
-		return sh, NewError("Encrypt dictionary missing required P field")
+	p, ok := encrypt.GetInt("P")
+	if !ok {
+		return EncryptionError
 	}
 	sh.p = make([]byte, 4)
 	binary.LittleEndian.PutUint32(sh.p, uint32(p))
 
 	// get EncryptMetadata
-	sh.encrypt_meta_data, err = encrypt.GetBool("EncryptMetadata")
-	if err != nil {
+	sh.encrypt_meta_data, ok = encrypt.GetBool("EncryptMetadata")
+	if !ok {
 		sh.encrypt_meta_data = true
 	}
 
 	// get ID[0] from trailer
-	ids, err := trailer.GetArray("ID")
-	if err != nil {
-		return sh, NewError("Trailer dictionary missing required ID field")
+	ids, ok := trailer.GetArray("ID")
+	if !ok {
+		return EncryptionError
 	}
-	sh.id, err = ids.GetBytes(0)
-	if err != nil {
-		return sh, NewError("Trailer dictionary missing required ID[0] field")
+	sh.id, ok = ids.GetBytes(0)
+	if !ok {
+		return EncryptionError
 	}
 
 	// compute encryption key from password
@@ -251,7 +250,7 @@ func NewSecurityHandler(password []byte, trailer Dictionary) (*SecurityHandler, 
 		cipher, _ := rc4.NewCipher(sh.encryption_key)
 		cipher.XORKeyStream(u, padding_string)
 		if string(u) != string(sh.u) {
-			return sh, ErrorPassword
+			return EncryptionPasswordError
 		}
 	} else if sh.r >= 3 { // for revision 3+ use algorithm 5
 		// step b, c
@@ -272,7 +271,7 @@ func NewSecurityHandler(password []byte, trailer Dictionary) (*SecurityHandler, 
 
 		// compare to first 16 bytes of U entry
 		if string(u) != string(sh.u[:16]) {
-			return sh, ErrorPassword
+			return EncryptionPasswordError
 		}
 	}
 
@@ -288,10 +287,10 @@ func NewSecurityHandler(password []byte, trailer Dictionary) (*SecurityHandler, 
 		cf, _ := encrypt.GetDictionary("CF")
 		for k, entry := range cf {
 			if cfd, isDictionary := entry.(Dictionary); isDictionary {
-				if method, err := cfd.GetName("CFM"); err == nil {
+				if method, ok := cfd.GetName("CFM"); ok {
 					// get optional length
-					length, err := cfd.GetInt("Length")
-					if err != nil {
+					length, ok := cfd.GetInt("Length")
+					if !ok {
 						length = sh.length
 					}
 
@@ -308,25 +307,24 @@ func NewSecurityHandler(password []byte, trailer Dictionary) (*SecurityHandler, 
 		}
 
 		// assign default filter overrides
-		if name, err := encrypt.GetName("StmF"); err == nil {
+		if name, ok := encrypt.GetName("StmF"); ok {
 			if filter, exists := sh.crypt_filters[name]; exists {
 				sh.stream_filter = filter
 			}
 		}
-		if name, err := encrypt.GetName("StrF"); err == nil {
+		if name, ok := encrypt.GetName("StrF"); ok {
 			if filter, exists := sh.crypt_filters[name]; exists {
 				sh.string_filter = filter
 			}
 		}
-		if name, err := encrypt.GetName("EEF"); err == nil {
+		if name, ok := encrypt.GetName("EEF"); ok {
 			if filter, exists := sh.crypt_filters[name]; exists {
 				sh.file_filter = filter
 			}
 		}
 	}
 
-	// return the sercuirty handler
-	return sh, nil
+	return nil
 }
 
 // Algorithm 2: Computing an encryption key

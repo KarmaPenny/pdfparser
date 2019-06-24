@@ -19,108 +19,95 @@ func (a Array) String() string {
 	return s.String()
 }
 
-func (a Array) GetArray(index int) (Array, error) {
-	object, err := a.GetObject(index)
-	if err != nil {
-		return Array{}, err
-	}
-	if array, ok := object.(Array); ok {
-		return array, nil
-	}
-	return Array{}, NewError("Expected array")
-}
-
-func (a Array) GetBool(index int) (bool, error) {
-	object, err := a.GetObject(index)
-	if err != nil {
-		return false, err
-	}
-	if keyword, ok := object.(Keyword); ok {
-		if keyword == KEYWORD_TRUE {
-			return true, nil
-		} else if keyword == KEYWORD_FALSE {
-			return false, nil
+func (a Array) GetArray(index int) (Array, bool) {
+	if object, ok := a.GetObject(index); ok {
+		if array, ok := object.(Array); ok {
+			return array, true
 		}
 	}
-	return false, NewError("Expected bool")
+	return Array{}, false
 }
 
-func (a Array) GetBytes(index int) ([]byte, error) {
-	s, err := a.GetString(index)
-	return []byte(s), err
+func (a Array) GetBool(index int) (bool, bool) {
+	if object, ok := a.GetObject(index); ok {
+		if keyword, ok := object.(Keyword); ok {
+			if keyword == KEYWORD_TRUE {
+				return true, true
+			} else if keyword == KEYWORD_FALSE {
+				return false, true
+			}
+		}
+	}
+	return false, false
 }
 
-func (a Array) GetDictionary(index int) (Dictionary, error) {
-	object, err := a.GetObject(index)
-	if err != nil {
-		return Dictionary{}, err
-	}
-	if dictionary, ok := object.(Dictionary); ok {
-		return dictionary, nil
-	}
-	return Dictionary{}, NewError("Expected dictionary")
+func (a Array) GetBytes(index int) ([]byte, bool) {
+	s, ok := a.GetString(index)
+	return []byte(s), ok
 }
 
-func (a Array) GetInt(index int) (int, error) {
-	number, err := a.GetNumber(index)
-	return int(number), err
+func (a Array) GetDictionary(index int) (Dictionary, bool) {
+	if object, ok := a.GetObject(index); ok {
+		if dictionary, ok := object.(Dictionary); ok {
+			return dictionary, true
+		}
+	}
+	return Dictionary{}, false
 }
 
-func (a Array) GetInt64(index int) (int64, error) {
-	number, err := a.GetNumber(index)
-	return int64(number), err
+func (a Array) GetInt(index int) (int, bool) {
+	number, ok := a.GetNumber(index)
+	return int(number), ok
 }
 
-func (a Array) GetName(index int) (string, error) {
-	object, err := a.GetObject(index)
-	if err != nil {
-		return "", err
-	}
-	if name, ok := object.(Name); ok {
-		return string(name), nil
-	}
-	return "", NewError("Expected name")
+func (a Array) GetInt64(index int) (int64, bool) {
+	number, ok := a.GetNumber(index)
+	return int64(number), ok
 }
 
-func (a Array) GetNumber(index int) (Number, error) {
-	object, err := a.GetObject(index)
-	if err != nil {
-		return Number(0), err
+func (a Array) GetName(index int) (string, bool) {
+	if object, ok := a.GetObject(index); ok {
+		if name, ok := object.(Name); ok {
+			return string(name), true
+		}
 	}
-	if number, ok := object.(Number); ok {
-		return number, nil
-	}
-	return Number(0), NewError("Expected number")
+	return "", false
 }
 
-func (a Array) GetObject(index int) (Object, error) {
-	if index < 0 || index >= len(a) {
-		return KEYWORD_NULL, NewError("index out of bounds")
+func (a Array) GetNumber(index int) (Number, bool) {
+	if object, ok := a.GetObject(index); ok {
+		if number, ok := object.(Number); ok {
+			return number, true
+		}
 	}
-	object := a[index]
-	if reference, ok := object.(*Reference); ok {
-		return reference.Resolve(), nil
-	}
-	return object, nil
+	return Number(0), false
 }
 
-func (a Array) GetStream(index int) ([]byte, error) {
-	if index < 0 || index >= len(a) {
-		return []byte{}, NewError("index out of bounds")
+func (a Array) GetObject(index int) (Object, bool) {
+	if index >= 0 && index < len(a) {
+		object := a[index]
+		if reference, ok := object.(*Reference); ok {
+			return reference.Resolve(), true
+		}
+		return object, true
 	}
-	if reference, ok := a[index].(*Reference); ok {
-		return reference.ResolveStream(), nil
-	}
-	return []byte{}, NewError("Expected reference")
+	return KEYWORD_NULL, false
 }
 
-func (a Array) GetString(index int) (string, error) {
-	object, err := a.GetObject(index)
-	if err != nil {
-		return "", err
+func (a Array) GetStream(index int) ([]byte, bool) {
+	if index >= 0 && index < len(a) {
+		if reference, ok := a[index].(*Reference); ok {
+			return reference.ResolveStream(), true
+		}
 	}
-	if s, ok := object.(String); ok {
-		return string(s), nil
+	return []byte{}, false
+}
+
+func (a Array) GetString(index int) (string, bool) {
+	if object, ok := a.GetObject(index); ok {
+		if s, ok := object.(String); ok {
+			return string(s), true
+		}
 	}
-	return "", NewError("Expected string")
+	return "", false
 }

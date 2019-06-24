@@ -26,15 +26,15 @@ type Parser struct {
 }
 
 func NewParser(readSeeker io.ReadSeeker) *Parser {
-	return &Parser{bufio.NewReader(readSeeker), readSeeker, map[int]*XrefEntry{}, Dictionary{}, defaultSecurityHandler}
+	return &Parser{bufio.NewReader(readSeeker), readSeeker, map[int]*XrefEntry{}, Dictionary{}, NewSecurityHandler()}
 }
 
 func (parser *Parser) Load(password string) error {
 	// find location of all xref tables
-	xref_offsets := parser.FindXrefOffsets()
+	xref_offsets := parser.findXrefOffsets()
 
 	// find location of all objects
-	objects := parser.FindObjects()
+	objects := parser.findObjects()
 
 	// add xref stream offsets to xref offsets then sort first to last
 	for _, object := range objects {
@@ -45,13 +45,13 @@ func (parser *Parser) Load(password string) error {
 	sort.Slice(xref_offsets, func(i, j int) bool { return xref_offsets[i] < xref_offsets[j] })
 
 	// add start xref offset as last entry in xref_offsets so it overrides xref entries
-	if start_xref_offset, err := parser.GetStartXrefOffset(); err == nil {
+	if start_xref_offset, ok := parser.getStartXrefOffset(); ok {
 		xref_offsets = append(xref_offsets, start_xref_offset)
 	}
 
 	// load all xrefs
 	for i := range xref_offsets {
-		parser.LoadXref(xref_offsets[i], map[int64]interface{}{})
+		parser.loadXref(xref_offsets[i], map[int64]interface{}{})
 	}
 
 	// repair broken and missing xref entries
@@ -59,7 +59,7 @@ func (parser *Parser) Load(password string) error {
 		if xref_entry, ok := parser.Xref[object_number]; ok {
 			// replace xref entry if it does not point to an object or points to the wrong object
 			parser.Seek(xref_entry.Offset, io.SeekStart)
-			if n, _, err := parser.ReadObjectHeader(); err != nil || n != object_number {
+			if n, _, ok := parser.ReadObjectHeader(); ok || n != object_number {
 				xref_entry.Offset = object.Offset
 			}
 		} else {
@@ -77,17 +77,21 @@ func (parser *Parser) Load(password string) error {
 			}
 		}
 
-		// set the password
-		if !parser.SetPassword(password) {
-			return ErrorPassword
+		// set encryption password
+		if err := parser.SetPassword(password); err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
+func (parser *Parser) SetPassword(password string) error {
+	return parser.security_handler.Init([]byte(password), parser.trailer)
+}
+
 // FindXrefOffsets locates all xref tables
-func (parser *Parser) FindXrefOffsets() []int64 {
+func (parser *Parser) findXrefOffsets() []int64 {
 	offsets := []int64{}
 
 	// jump to start of file
@@ -111,7 +115,7 @@ func (parser *Parser) FindXrefOffsets() []int64 {
 }
 
 // FindObjects locates all object markers
-func (parser *Parser) FindObjects() map[int]*XrefEntry {
+func (parser *Parser) findObjects() map[int]*XrefEntry {
 	// create xref map
 	objects := map[int]*XrefEntry{}
 
@@ -135,11 +139,10 @@ func (parser *Parser) FindObjects() map[int]*XrefEntry {
 		objects[n] = NewXrefEntry(offset + int64(index[0]), g, XrefTypeIndirectObject)
 
 		// determine if object is xref stream
-		if d, err := parser.ReadDictionary(noDecryptor); err == nil {
-			if t, err := d.GetName("Type"); err == nil && t == "XRef" {
-				objects[n].IsXrefStream = true
-				objects[n].IsEncrypted = false
-			}
+		d := parser.ReadDictionary(noDecryptor)
+		if t, ok := d.GetName("Type"); ok && t == "XRef" {
+			objects[n].IsXrefStream = true
+			objects[n].IsEncrypted = false
 		}
 
 		// seek to end of object start marker
@@ -149,17 +152,7 @@ func (parser *Parser) FindObjects() map[int]*XrefEntry {
 	return objects
 }
 
-func (parser *Parser) SetPassword(password string) bool {
-	sh, err := NewSecurityHandler([]byte(password), parser.trailer)
-	if err != nil {
-		return false
-	}
-	parser.security_handler = sh
-	return true
-}
-
-// GetStartXrefOffset returns the offset to the first xref table
-func (parser *Parser) GetStartXrefOffset() (int64, error) {
+func (parser *Parser) getStartXrefOffset() (int64, bool) {
 	// start reading from the end of the file
 	offset, _ := parser.Seek(0, io.SeekEnd)
 
@@ -176,79 +169,72 @@ func (parser *Parser) GetStartXrefOffset() (int64, error) {
 
 	// check for start xref
 	matches := start_xref_regexp.FindAllSubmatch(buffer, -1)
-	if matches != nil {
-		// return the last most start xref offset
-		start_xref_offset, err := strconv.ParseInt(string(matches[len(matches)-1][1]), 10, 64)
-		if err != nil {
-			return 0, WrapError(err, "Start xref offset is not int64: %s", string(matches[len(matches)-1][1]))
+	if matches == nil {
+		return 0, false
+	}
+
+	// convert match to int64
+	start_xref_offset, err := strconv.ParseInt(string(matches[len(matches)-1][1]), 10, 64)
+	if err != nil {
+		return 0, false
+	}
+
+	// return the start xref offset
+	return start_xref_offset, true
+}
+
+func (parser *Parser) loadXref(offset int64, offsets map[int64]interface{}) {
+	// dont load same xref twice
+	if _, ok := offsets[offset]; !ok {
+		offsets[offset] = nil
+
+		// if xref is a table
+		parser.Seek(offset, io.SeekStart)
+		if keyword := parser.ReadKeyword(); keyword == KEYWORD_XREF {
+			parser.loadXrefTable(offsets)
+		} else {
+			// if xref is a stream
+			parser.Seek(offset, io.SeekStart)
+			if n, g, ok := parser.ReadObjectHeader(); ok {
+				// prevent decrypting xref streams
+				parser.Xref[n] = NewXrefEntry(offset, g, XrefTypeIndirectObject)
+				parser.Xref[n].IsEncrypted = false
+
+				// read the xref object
+				parser.loadXrefStream(n, offsets)
+			}
 		}
-		return start_xref_offset, nil
 	}
-
-	// start xref not found
-	return 0, NewError("Start xref marker not found")
 }
 
-func (parser *Parser) LoadXref(offset int64, offsets map[int64]interface{}) error {
-	// track loaded xref offsets to prevent infinite loop
-	if _, ok := offsets[offset]; ok {
-		// xref already loaded
-		return nil
-	}
-	offsets[offset] = nil
-
-	// if xref is a table
-	parser.Seek(offset, io.SeekStart)
-	if keyword := parser.ReadKeyword(); keyword == KEYWORD_XREF {
-		return parser.LoadXrefTable(offsets)
-	}
-
-	// if xref is a stream
-	parser.Seek(offset, io.SeekStart)
-	if n, g, err := parser.ReadObjectHeader(); err == nil {
-		// prevent decrypting xref streams
-		parser.Xref[n] = NewXrefEntry(offset, g, XrefTypeIndirectObject)
-		parser.Xref[n].IsEncrypted = false
-
-		// read the xref object
-		return parser.LoadXrefStream(n, offsets)
-	}
-
-	return NewError("Expected xref table or stream")
-}
-
-func (parser *Parser) LoadXrefTable(offsets map[int64]interface{}) error {
+func (parser *Parser) loadXrefTable(offsets map[int64]interface{}) {
 	// read all xref entries
 	xrefs := map[int]*XrefEntry{}
 	for {
 		// get subsection start
-		subsection_start, err := parser.ReadInt()
-		if err != nil {
-			// we are at the trailer
-			if keyword := parser.ReadKeyword(); keyword == KEYWORD_TRAILER {
-				break
-			}
-			return NewError("Expected int or trailer keyword")
+		subsection_start, ok := parser.ReadInt()
+		if !ok {
+			break
 		}
 
 		// get subsection length
-		subsection_length, err := parser.ReadInt()
-		if err != nil {
-			return err
+		subsection_length, ok := parser.ReadInt()
+		if !ok {
+			break
 		}
 
 		// load each object in xref subsection
 		for i := 0; i < subsection_length; i++ {
 			// find xref entry offset
-			offset, err := parser.ReadInt64()
-			if err != nil {
-				return err
+			offset, ok := parser.ReadInt64()
+			if !ok {
+				break
 			}
 
 			// find xref entry generation
-			generation, err := parser.ReadInt()
-			if err != nil {
-				return err
+			generation, ok := parser.ReadInt()
+			if !ok {
+				break
 			}
 
 			// find xref entry in use flag
@@ -266,15 +252,15 @@ func (parser *Parser) LoadXrefTable(offsets map[int64]interface{}) error {
 		}
 	}
 
+	// read trailer keyword
+	parser.ReadKeyword();
+
 	// read in trailer dictionary
-	trailer, err := parser.ReadDictionary(noDecryptor)
-	if err != nil {
-		return err
-	}
+	trailer := parser.ReadDictionary(noDecryptor);
 
 	// load previous xref section if it exists
-	if prev, err := trailer.GetInt64("Prev"); err == nil {
-		parser.LoadXref(prev, offsets)
+	if prev, ok := trailer.GetInt64("Prev"); ok {
+		parser.loadXref(prev, offsets)
 	}
 
 	// merge trailer
@@ -286,23 +272,21 @@ func (parser *Parser) LoadXrefTable(offsets map[int64]interface{}) error {
 	for key, value := range xrefs {
 		parser.Xref[key] = value
 	}
-
-	return nil
 }
 
-func (parser *Parser) LoadXrefStream(n int, offsets map[int64]interface{}) error {
+func (parser *Parser) loadXrefStream(n int, offsets map[int64]interface{}) {
 	// Get the xref stream object
 	object := parser.GetObject(n)
 
 	// get the stream dictionary which is also the trailer dictionary
 	trailer, ok := object.Value.(Dictionary)
 	if !ok {
-		return NewError("xref stream has no trailer dictionary")
+		return
 	}
 
 	// load previous xref section if it exists
-	if prev, err := trailer.GetInt64("Prev"); err == nil {
-		parser.LoadXref(prev, offsets)
+	if prev, ok := trailer.GetInt64("Prev"); ok {
+		parser.loadXref(prev, offsets)
 	}
 
 	// merge trailer
@@ -311,60 +295,60 @@ func (parser *Parser) LoadXrefStream(n int, offsets map[int64]interface{}) error
 	}
 
 	// get the index and width arrays
-	index, err := trailer.GetArray("Index")
-	if err != nil {
+	index, ok := trailer.GetArray("Index")
+	if !ok {
 		// if there is no Index field then use default of [0 Size]
-		size, err := trailer.GetNumber("Size")
-		if err != nil {
-			return err
+		size, ok := trailer.GetNumber("Size")
+		if !ok {
+			return
 		}
 		index = Array{Number(0), size}
 	}
-	width, err := trailer.GetArray("W")
-	if err != nil {
-		return err
+	width, ok := trailer.GetArray("W")
+	if !ok {
+		return
 	}
 
 	// get widths of each field
-	type_width, err := width.GetInt(0)
-	if err != nil {
-		return err
+	type_width, ok := width.GetInt(0)
+	if !ok {
+		return
 	}
-	offset_width, err := width.GetInt(1)
-	if err != nil {
-		return err
+	offset_width, ok := width.GetInt(1)
+	if !ok {
+		return
 	}
-	generation_width, err := width.GetInt(2)
-	if err != nil {
-		return err
+	generation_width, ok := width.GetInt(2)
+	if !ok {
+		return
 	}
 
 	// parse xref subsections
 	data_reader := bytes.NewReader(object.Stream)
 	for i := 0; i < len(index) - 1; i += 2 {
 		// get subsection start and length
-		subsection_start, err := index.GetInt(i)
-		if err != nil {
-			return err
+		subsection_start, ok := index.GetInt(i)
+		if !ok {
+			return
 		}
-		subsection_length, err := index.GetInt(i + 1)
-		if err != nil {
-			return err
+		subsection_length, ok := index.GetInt(i + 1)
+		if !ok {
+			return
 		}
 
 		// read in each entry in subsection
 		for j := 0; j < subsection_length; j++ {
-			xref_type, err := ReadInt(data_reader, type_width)
-			if err != nil {
-				return err
+			xref_type, ok := ReadInt(data_reader, type_width)
+			if !ok {
+				return
 			}
-			offset, err := ReadInt64(data_reader, offset_width)
-			if err != nil {
-				return err
+			offset, ok := ReadInt64(data_reader, offset_width)
+			if !ok {
+				return
 			}
-			generation, err := ReadInt(data_reader, generation_width)
-			if err != nil {
-				return err
+			generation, ok := ReadInt(data_reader, generation_width)
+			if !ok {
+				return
 			}
 
 			// determine object number from subsection_start
@@ -374,8 +358,6 @@ func (parser *Parser) LoadXrefStream(n int, offsets map[int64]interface{}) error
 			parser.Xref[object_number] = NewXrefEntry(offset, generation, xref_type)
 		}
 	}
-
-	return nil
 }
 
 func (parser *Parser) GetObject(number int) *IndirectObject {
@@ -411,9 +393,9 @@ func (parser *Parser) GetObject(number int) *IndirectObject {
 				}
 
 				// create list of decode filters
-				filter_list, err := d.GetArray("Filter")
-				if err != nil {
-					if filter, err := d.GetName("Filter"); err == nil {
+				filter_list, ok := d.GetArray("Filter")
+				if !ok {
+					if filter, ok := d.GetName("Filter"); ok {
 						filter_list = Array{Name(filter)}
 					} else {
 						filter_list = Array{}
@@ -421,9 +403,9 @@ func (parser *Parser) GetObject(number int) *IndirectObject {
 				}
 
 				// create list of decode parms
-				decode_parms_list, err := d.GetArray("DecodeParms")
-				if err != nil {
-					if decode_parms, err := d.GetDictionary("DecodeParms"); err == nil {
+				decode_parms_list, ok := d.GetArray("DecodeParms")
+				if !ok {
+					if decode_parms, ok := d.GetDictionary("DecodeParms"); ok {
 						decode_parms_list = Array{decode_parms}
 					} else {
 						decode_parms_list = Array{}
@@ -437,7 +419,7 @@ func (parser *Parser) GetObject(number int) *IndirectObject {
 					crypt_filter = parser.security_handler.stream_filter
 
 					// use embedded file filter if object is an embedded file
-					if t, err := d.GetName("Type"); err == nil && string(t) == "EmbeddedFile" {
+					if t, ok := d.GetName("Type"); ok && t == "EmbeddedFile" {
 						crypt_filter = parser.security_handler.file_filter
 					}
 
@@ -445,8 +427,8 @@ func (parser *Parser) GetObject(number int) *IndirectObject {
 					if len(filter_list) > 0 {
 						if filter, _ := filter_list.GetName(0); filter == "Crypt" {
 							decode_parms, _ := decode_parms_list.GetDictionary(0)
-							filter_name, err := decode_parms.GetName("Name")
-							if err != nil {
+							filter_name, ok := decode_parms.GetName("Name")
+							if !ok {
 								filter_name = "Identity"
 							}
 							if cf, exists := parser.security_handler.crypt_filters[filter_name]; exists {
@@ -484,24 +466,24 @@ func (parser *Parser) CurrentOffset() int64 {
 }
 
 // ReadObjectHeader reads an object header (10 0 obj) from the current position and returns the object number and generation
-func (parser *Parser) ReadObjectHeader() (int, int, error) {
+func (parser *Parser) ReadObjectHeader() (int, int, bool) {
 	// read object number
-	number, err := parser.ReadInt()
-	if err != nil {
-		return number, 0, err
+	number, ok := parser.ReadInt()
+	if !ok {
+		return number, 0, false
 	}
 
 	// read object generation
-	generation, err := parser.ReadInt()
-	if err != nil {
-		return number, generation, err
+	generation, ok := parser.ReadInt()
+	if !ok {
+		return number, generation, false
 	}
 
 	// read object start marker
 	if keyword := parser.ReadKeyword(); keyword != KEYWORD_OBJ {
-		return number, generation, NewError("Expected obj keyword")
+		return number, generation, false
 	}
-	return number, generation, nil
+	return number, generation, true
 }
 
 func (parser *Parser) ReadObject(decryptor Decryptor) (Object, error) {
@@ -511,17 +493,17 @@ func (parser *Parser) ReadObject(decryptor Decryptor) (Object, error) {
 	// peek at next 2 bytes to determine object type
 	b, _ := parser.Peek(2)
 	if len(b) == 0 {
-		return KEYWORD_NULL, ErrorRead
+		return KEYWORD_NULL, ReadError
 	}
 
 	// handle names
 	if b[0] == '/' {
-		return parser.ReadName()
+		return parser.ReadName(), nil
 	}
 
 	// handle arrays
 	if b[0] == '[' {
-		return parser.ReadArray(decryptor)
+		return parser.ReadArray(decryptor), nil
 	}
 	if b[0] == ']' {
 		parser.Discard(1)
@@ -530,12 +512,12 @@ func (parser *Parser) ReadObject(decryptor Decryptor) (Object, error) {
 
 	// handle strings
 	if b[0] == '(' {
-		return parser.ReadString(decryptor)
+		return parser.ReadString(decryptor), nil
 	}
 
 	// handle dictionaries
 	if string(b) == "<<" {
-		return parser.ReadDictionary(decryptor)
+		return parser.ReadDictionary(decryptor), nil
 	}
 	if string(b) == ">>" {
 		parser.Discard(2)
@@ -544,22 +526,19 @@ func (parser *Parser) ReadObject(decryptor Decryptor) (Object, error) {
 
 	// handle hex strings
 	if b[0] == '<' {
-		return parser.ReadHexString(decryptor)
+		return parser.ReadHexString(decryptor), nil
 	}
 
 	// handle numbers and references
 	if (b[0] >= '0' && b[0] <= '9') || b[0] == '+' || b[0] == '-' || b[0] == '.' {
-		number, err := parser.ReadNumber()
-		if err != nil {
-			return number, err
-		}
+		number := parser.ReadNumber()
 
 		// save offset so we can revert if this is not a reference
 		offset := parser.CurrentOffset()
 
 		// if generation number does not follow then revert to saved offset and return number
-		generation, err := parser.ReadInt()
-		if err != nil {
+		generation, ok := parser.ReadInt()
+		if !ok {
 			parser.Seek(offset, io.SeekStart)
 			return number, nil
 		}
@@ -578,7 +557,7 @@ func (parser *Parser) ReadObject(decryptor Decryptor) (Object, error) {
 	return parser.ReadKeyword(), nil
 }
 
-func (parser *Parser) ReadArray(decryptor Decryptor) (Array, error) {
+func (parser *Parser) ReadArray(decryptor Decryptor) Array {
 	// consume any leading whitespace/comments
 	parser.consumeWhitespace()
 
@@ -587,25 +566,21 @@ func (parser *Parser) ReadArray(decryptor Decryptor) (Array, error) {
 
 	// read start of array marker
 	b, err := parser.ReadByte()
-	if err != nil {
-		return array, ErrorRead
-	}
-	if b != '[' {
-		return array, NewError("Expected [")
+	if err != nil || b != '[' {
+		return array
 	}
 
 	// read in elements and append to array
 	for {
 		element, err := parser.ReadObject(decryptor)
-		if err == ErrorRead || err == EndOfArray {
-			// stop if at eof or end of array
+		if err == ReadError || err == EndOfArray {
 			break
 		}
 		array = append(array, element)
 	}
 
 	// return array
-	return array, nil
+	return array
 }
 
 func (parser *Parser) ReadCommand() (Keyword, Array, error) {
@@ -613,7 +588,7 @@ func (parser *Parser) ReadCommand() (Keyword, Array, error) {
 	operands := Array{}
 	for {
 		operand, err := parser.ReadObject(noDecryptor)
-		if err == ErrorRead {
+		if err != nil {
 			return KEYWORD_NULL, operands, err
 		}
 		if keyword, ok := operand.(Keyword); ok {
@@ -623,7 +598,7 @@ func (parser *Parser) ReadCommand() (Keyword, Array, error) {
 	}
 }
 
-func (parser *Parser) ReadDictionary(decryptor Decryptor) (Dictionary, error) {
+func (parser *Parser) ReadDictionary(decryptor Decryptor) Dictionary {
 	// consume any leading whitespace/comments
 	parser.consumeWhitespace()
 
@@ -633,40 +608,37 @@ func (parser *Parser) ReadDictionary(decryptor Decryptor) (Dictionary, error) {
 	// read start of dictionary markers
 	b := make([]byte, 2)
 	_, err := parser.Read(b)
-	if err != nil {
-		return dictionary, ErrorRead
-	}
-	if string(b) != "<<" {
-		return dictionary, NewError("Expected <<")
+	if err != nil || string(b) != "<<" {
+		return dictionary
 	}
 
 	// parse all key value pairs
 	for {
 		// read next object
 		name, err := parser.ReadObject(decryptor)
-		if err == ErrorRead || err == EndOfDictionary {
+		if err == ReadError || err == EndOfDictionary {
 			break
 		}
-		key, isName := name.(Name)
-		if !isName || err != nil {
+
+		// skip if not a name
+		key, ok := name.(Name)
+		if !ok {
 			continue
 		}
 
 		// get value
 		value, err := parser.ReadObject(decryptor)
+		if err == ReadError || err == EndOfDictionary {
+			break
+		}
 
 		// add key value pair to dictionary
 		dictionary[string(key)] = value
-
-		// stop if at eof or end of dictionary
-		if err == ErrorRead || err == EndOfDictionary {
-			break
-		}
 	}
-	return dictionary, nil
+	return dictionary
 }
 
-func (parser *Parser) ReadHexString(decryptor Decryptor) (String, error) {
+func (parser *Parser) ReadHexString(decryptor Decryptor) String {
 	// consume any leading whitespace/comments
 	parser.consumeWhitespace()
 
@@ -675,11 +647,8 @@ func (parser *Parser) ReadHexString(decryptor Decryptor) (String, error) {
 
 	// read start of hex string marker
 	b, err := parser.ReadByte()
-	if err != nil {
-		return String(s.String()), ErrorRead
-	}
-	if b != '<' {
-		return String(s.String()), NewError("Expected <")
+	if err != nil || b != '<' {
+		return String(s.String())
 	}
 
 	// read hex code pairs until end of hex string or file
@@ -693,7 +662,7 @@ func (parser *Parser) ReadHexString(decryptor Decryptor) (String, error) {
 					val, _ := strconv.ParseUint(string(code), 16, 8)
 					s.WriteByte(byte(val))
 				}
-				return String(decryptor.Decrypt([]byte(s.String()))), nil
+				return String(decryptor.Decrypt([]byte(s.String())))
 			}
 			if !IsHex(b) {
 				continue
@@ -706,12 +675,12 @@ func (parser *Parser) ReadHexString(decryptor Decryptor) (String, error) {
 	}
 }
 
-func (parser *Parser) ReadInt() (int, error) {
-	value, err := parser.ReadInt64()
-	return int(value), err
+func (parser *Parser) ReadInt() (int, bool) {
+	value, ok := parser.ReadInt64()
+	return int(value), ok
 }
 
-func (parser *Parser) ReadInt64() (int64, error) {
+func (parser *Parser) ReadInt64() (int64, bool) {
 	// consume any leading whitespace/comments
 	parser.consumeWhitespace()
 
@@ -722,7 +691,7 @@ func (parser *Parser) ReadInt64() (int64, error) {
 	b, err := parser.ReadByte()
 	if err != nil || b < '0' || b > '9' {
 		parser.UnreadByte()
-		return value, NewError("Expected int")
+		return value, false
 	}
 
 	// add digit to value
@@ -745,7 +714,7 @@ func (parser *Parser) ReadInt64() (int64, error) {
 		value = value * 10 + int64(b - '0')
 	}
 
-	return value, nil
+	return value, true
 }
 
 func (parser *Parser) ReadKeyword() Keyword {
@@ -776,7 +745,7 @@ func (parser *Parser) ReadKeyword() Keyword {
 	return NewKeyword(keyword.String())
 }
 
-func (parser *Parser) ReadName() (Name, error) {
+func (parser *Parser) ReadName() Name {
 	// consume any leading whitespace/comments
 	parser.consumeWhitespace()
 
@@ -785,18 +754,15 @@ func (parser *Parser) ReadName() (Name, error) {
 
 	// read start of name marker
 	b, err := parser.ReadByte()
-	if err != nil {
-		return Name(name.String()), ErrorRead
-	}
-	if b != '/' {
-		return Name(name.String()), NewError("Expected /")
+	if err != nil || b != '/' {
+		return Name(name.String())
 	}
 
 	for {
 		// read in the next byte
 		b, err = parser.ReadByte()
 		if err != nil {
-			return Name(name.String()), nil
+			return Name(name.String())
 		}
 
 		// if the next byte is whitespace or delimiter then unread it and return the name
@@ -830,10 +796,10 @@ func (parser *Parser) ReadName() (Name, error) {
 		name.WriteByte(b)
 	}
 
-	return Name(name.String()), nil
+	return Name(name.String())
 }
 
-func (parser *Parser) ReadNumber() (Number, error) {
+func (parser *Parser) ReadNumber() Number {
 	// consume any leading whitespace/comments
 	parser.consumeWhitespace()
 
@@ -845,7 +811,7 @@ func (parser *Parser) ReadNumber() (Number, error) {
 	// process first byte
 	b, err := parser.ReadByte()
 	if err != nil {
-		return number, ErrorRead
+		return number
 	}
 	if b == '-' {
 		isNegative = true
@@ -855,7 +821,7 @@ func (parser *Parser) ReadNumber() (Number, error) {
 		isReal = true
 	} else if b != '+' {
 		parser.UnreadByte()
-		return number, NewError("Expected number")
+		return number
 	}
 
 	// parse int part
@@ -898,7 +864,7 @@ func (parser *Parser) ReadNumber() (Number, error) {
 	}
 
 	// return the number
-	return number, nil
+	return number
 }
 
 func (parser *Parser) ReadStream(decryptor Decryptor, filter_list Array, decode_parms_list Array) []byte {
@@ -979,19 +945,19 @@ func (parser *Parser) ReadStream(decryptor Decryptor, filter_list Array, decode_
 	for i := 0; i < len(filter_list); i++ {
 		filter, _ := filter_list.GetName(i)
 		decode_parms, _ := decode_parms_list.GetDictionary(i)
-		decoded_bytes, err := DecodeStream(filter, stream_data_bytes, decode_parms)
-		if err != nil {
-			// stop when decode error enountered
+		if decoded_bytes, ok := DecodeStream(filter, stream_data_bytes, decode_parms); ok {
+			stream_data_bytes = decoded_bytes
+		} else {
+			// stop if decode failed
 			return stream_data_bytes
 		}
-		stream_data_bytes = decoded_bytes
 	}
 
 	// return the decrypted and decoded stream
 	return stream_data_bytes
 }
 
-func (parser *Parser) ReadString(decryptor Decryptor) (String, error) {
+func (parser *Parser) ReadString(decryptor Decryptor) String {
 	// consume any leading whitespace/comments
 	parser.consumeWhitespace()
 
@@ -1001,10 +967,10 @@ func (parser *Parser) ReadString(decryptor Decryptor) (String, error) {
 	// read start of string marker
 	b, err := parser.ReadByte()
 	if err != nil {
-		return String(s.String()), ErrorRead
+		return String(s.String())
 	}
 	if b != '(' {
-		return String(s.String()), NewError("Expected (")
+		return String(s.String())
 	}
 
 	// find balanced closing bracket
@@ -1012,7 +978,7 @@ func (parser *Parser) ReadString(decryptor Decryptor) (String, error) {
 		// read next byte
 		b, err = parser.ReadByte()
 		if err != nil {
-			return String(decryptor.Decrypt([]byte(s.String()))), nil
+			return String(decryptor.Decrypt([]byte(s.String())))
 		}
 
 		// if this is the start of an escape sequence
@@ -1021,7 +987,7 @@ func (parser *Parser) ReadString(decryptor Decryptor) (String, error) {
 			b, err = parser.ReadByte()
 			if err != nil {
 				s.WriteByte('\\')
-				return String(decryptor.Decrypt([]byte(s.String()))), nil
+				return String(decryptor.Decrypt([]byte(s.String())))
 			}
 
 			// ignore escaped line breaks \n or \r or \r\n
@@ -1032,7 +998,7 @@ func (parser *Parser) ReadString(decryptor Decryptor) (String, error) {
 				// read next byte
 				b, err = parser.ReadByte()
 				if err != nil {
-					return String(decryptor.Decrypt([]byte(s.String()))), nil
+					return String(decryptor.Decrypt([]byte(s.String())))
 				}
 				// if byte is not a new line then unread it
 				if b != '\n' {
@@ -1110,7 +1076,7 @@ func (parser *Parser) ReadString(decryptor Decryptor) (String, error) {
 	}
 
 	// return string
-	return String(decryptor.Decrypt([]byte(s.String()))), nil
+	return String(decryptor.Decrypt([]byte(s.String())))
 }
 
 // consumeWhitespace reads until end of whitespace/comments

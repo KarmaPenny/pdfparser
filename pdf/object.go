@@ -40,31 +40,31 @@ func (object *IndirectObject) Extract(output *Output) {
 func extract(o Object, output *Output) {
 	if d, ok := o.(Dictionary); ok {
 		// dump actions
-		if a, err := d.GetDictionary("A"); err == nil {
+		if a, ok := d.GetDictionary("A"); ok {
 			Action(a).Extract(output)
 		}
 
 		// dump open action
-		if open_action, err := d.GetDictionary("OpenAction"); err == nil {
+		if open_action, ok := d.GetDictionary("OpenAction"); ok {
 			Action(open_action).Extract(output)
 		}
 
 		// dump additional actions
-		if aa, err := d.GetDictionary("AA"); err == nil {
+		if aa, ok := d.GetDictionary("AA"); ok {
 			for key := range aa {
-				if a, err := aa.GetDictionary(key); err == nil {
+				if a, ok := aa.GetDictionary(key); ok {
 					Action(a).Extract(output)
 				}
 			}
 		}
 
 		// dump forms
-		if xfa, err := d.GetStream("XFA"); err == nil {
+		if xfa, ok := d.GetStream("XFA"); ok {
 			output.DumpFile("form.xml", xfa)
-		} else if xfa, err := d.GetArray("XFA"); err == nil {
+		} else if xfa, ok := d.GetArray("XFA"); ok {
 			var form_data strings.Builder
 			for i := range xfa {
-				if s, err := xfa.GetStream(i); err == nil {
+				if s, ok := xfa.GetStream(i); ok {
 					form_data.WriteString(string(s))
 				}
 			}
@@ -74,30 +74,30 @@ func extract(o Object, output *Output) {
 		// dump Embedded Files
 		embedded_files := d.GetNameTreeMap("EmbeddedFiles")
 		for i := 1; i < len(embedded_files); i += 2 {
-			if f, err := embedded_files.GetString(i); err == nil {
+			if f, ok := embedded_files.GetString(i); ok {
 				fmt.Fprintf(output.Files, "%s:%s\n", unknownHash, f)
-			} else if f, err := embedded_files.GetDictionary(i); err == nil {
+			} else if f, ok := embedded_files.GetDictionary(i); ok {
 				File(f).Extract(output, false)
 			}
 		}
 
 		// dump javascript
-		if js, err := d.GetString("JS"); err == nil {
-			fmt.Fprintln(output.Javascript, string(js))
-		} else if js, err := d.GetStream("JS"); err == nil {
+		if js, ok := d.GetString("JS"); ok {
+			fmt.Fprintln(output.Javascript, js)
+		} else if js, ok := d.GetStream("JS"); ok {
 			fmt.Fprintln(output.Javascript, string(js))
 		}
 
 		// dump page text
-		if t, err := d.GetName("Type"); err == nil && string(t) == "Page" {
+		if t, ok := d.GetName("Type"); ok && t == "Page" {
 			Page(d).Extract(output)
 		}
 
 		// dump URIs
-		if url, err := d.GetString("URI"); err == nil {
+		if url, ok := d.GetString("URI"); ok {
 			fmt.Fprintln(output.URLs, string(url))
-		} else if url, err := d.GetDictionary("URI"); err == nil {
-			if base, err := url.GetString("Base"); err == nil {
+		} else if url, ok := d.GetDictionary("URI"); ok {
+			if base, ok := url.GetString("Base"); ok {
 				fmt.Fprintln(output.URLs, string(base))
 			}
 		}
@@ -105,7 +105,7 @@ func extract(o Object, output *Output) {
 		// dump URLs
 		urls := d.GetNameTreeMap("URLS")
 		for i := 0; i < len(urls); i += 2 {
-			if url, err := urls.GetString(i); err == nil {
+			if url, ok := urls.GetString(i); ok {
 				fmt.Fprintln(output.URLs, string(url))
 			}
 		}

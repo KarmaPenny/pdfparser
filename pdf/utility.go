@@ -5,23 +5,24 @@ import (
 )
 
 // ReadInt reads width bytes from reader and returns the int64 value
-func ReadInt(reader io.Reader, width int) (int, error) {
-	v, err := ReadInt64(reader, width)
-	return int(v), err
+func ReadInt(reader io.Reader, width int) (int, bool) {
+	v, ok := ReadInt64(reader, width)
+	return int(v), ok
 }
 
 // ReadInt reads width bytes from reader and returns the int64 value
-func ReadInt64(reader io.Reader, width int) (v int64, err error) {
+func ReadInt64(reader io.Reader, width int) (int64, bool) {
 	data := make([]byte, width)
 	bytes_read, _ := reader.Read(data)
 	if bytes_read != width {
-		return v, NewError("Failed to read int")
+		return 0, false
 	}
+	v := int64(0)
 	for i := 0; i < len(data); i++ {
 		v *= 256
 		v += int64(data[i])
 	}
-	return v, nil
+	return v, true
 }
 
 // IsHex returns true if the byte is a hex character

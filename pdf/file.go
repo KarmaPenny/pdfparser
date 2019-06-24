@@ -13,28 +13,28 @@ func (file File) Extract(output *Output, isCommand bool) {
 
 	// file specification can be a url or file
 	fs, _ := d.GetString("FS")
-	if string(fs) == "URL" {
-		if f, err := d.GetString("F"); err == nil {
-			fmt.Fprintln(output.URLs, string(f))
+	if fs == "URL" {
+		if f, ok := d.GetString("F"); ok {
+			fmt.Fprintln(output.URLs, f)
 		}
-	} else if ef, err := d.GetDictionary("EF"); err == nil {
+	} else if ef, ok := d.GetDictionary("EF"); ok {
 		// get the file data
 		file_data, _ := ef.GetStream("F")
 
 		// get the file path
-		f, err := d.GetString("F")
-		if err != nil {
+		f, ok := d.GetString("F")
+		if !ok {
 			f = unknownHash
 		}
 
 		// dump file
 		output.DumpFile(f, file_data)
-	} else if p, err := d.GetString("P"); err == nil {
-		if f, err := d.GetString("F"); err == nil {
+	} else if p, ok := d.GetString("P"); ok {
+		if f, ok := d.GetString("F"); ok {
 			fmt.Fprintf(output.Files, "%s:%s\n", unknownHash, f)
 			fmt.Fprintf(output.Commands, "%s %s\n", f, p)
 		}
-	} else if f, err := d.GetString("F"); err == nil {
+	} else if f, ok := d.GetString("F"); ok {
 		if isCommand {
 			fmt.Fprintf(output.Commands, "%s %s\n", f, p)
 		}

@@ -11,25 +11,25 @@ import (
 	tiff_lzw "golang.org/x/image/tiff/lzw"
 )
 
-func DecodeStream(filter string, data []byte, decode_parms Dictionary) ([]byte, error) {
+func DecodeStream(filter string, data []byte, decode_parms Dictionary) ([]byte, bool) {
 	// do nothing if data is empty
 	if len(data) == 0 {
-		return data, nil
+		return data, true
 	}
 
 	// apply hex filter
 	if filter == "ASCIIHexDecode" {
-		return ASCIIHexDecode(data)
+		return ASCIIHexDecode(data), true
 	}
 
 	// apply ascii 85 filter
 	if filter == "ASCII85Decode" {
-		return ASCII85Decode(data)
+		return ASCII85Decode(data), true
 	}
 
 	// apply run length filter
 	if filter == "RunLengthDecode" {
-		return RunLengthDecode(data)
+		return RunLengthDecode(data), true
 	}
 
 	// apply zlib filter
@@ -43,10 +43,10 @@ func DecodeStream(filter string, data []byte, decode_parms Dictionary) ([]byte, 
 	}
 
 	// filter is not supported
-	return data, NewError("Unsupported Filter: %s", filter)
+	return data, false
 }
 
-func ASCIIHexDecode(data []byte) ([]byte, error) {
+func ASCIIHexDecode(data []byte) []byte {
 	// allocate buffer for decoded bytes
 	decoded_data := make([]byte, 0, len(data))
 
@@ -65,11 +65,6 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 			break
 		}
 
-		// make sure it is valid character
-		if !IsHex(b1) {
-			return decoded_data, NewError("ASCIIHexDecode: Illegal character: %x", b1)
-		}
-
 		// get the second byte defaulting to zero
 		b2 := byte('0')
 		for ; i + 1 < len(data); i++ {
@@ -83,11 +78,6 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 				break
 			}
 
-			// make sure it is valid character
-			if !IsHex(data[i+1]) {
-				return decoded_data, NewError("ASCIIHexDecode: Illegal character: %x", data[i+1])
-			}
-
 			// set second byte
 			i++
 			b2 = data[i]
@@ -97,16 +87,16 @@ func ASCIIHexDecode(data []byte) ([]byte, error) {
 		// add decoded byte to decoded data
 		val, err := strconv.ParseUint(string([]byte{b1, b2}), 16, 8)
 		if err != nil {
-			return decoded_data, WrapError(err, "ASCIIHexDecode: Illegal character: %x", []byte{b1, b2})
+			// TODO: report illegal character
+			continue
 		}
-		b := byte(val)
-		decoded_data = append(decoded_data, b)
+		decoded_data = append(decoded_data, byte(val))
 	}
 
-	return decoded_data, nil
+	return decoded_data
 }
 
-func ASCII85Decode(data []byte) ([]byte, error) {
+func ASCII85Decode(data []byte) []byte {
 	reader := bytes.NewReader(data)
 	decoded_data := bytes.NewBuffer([]byte{})
 
@@ -128,7 +118,7 @@ func ASCII85Decode(data []byte) ([]byte, error) {
 				decoded_data.Write(buff[:n-1])
 			}
 
-			return decoded_data.Bytes(), nil
+			return decoded_data.Bytes()
 		}
 
 		// skip whitespace
@@ -139,7 +129,8 @@ func ASCII85Decode(data []byte) ([]byte, error) {
 		// handle special case
 		if b == 'z' {
 			if n != 0 {
-				return decoded_data.Bytes(), NewError("ASCII85Decode: z character in middle of group")
+				// TODO: report invalid use of z character
+				continue
 			}
 
 			// write all zeros then continue
@@ -149,7 +140,8 @@ func ASCII85Decode(data []byte) ([]byte, error) {
 
 		// validate byte
 		if b < '!' || b > 'u' {
-			return decoded_data.Bytes(), NewError("ASCII85 decode: Invalid character %x", b)
+			// TODO: report invalid ascii85 character
+			continue
 		}
 
 		// increment counter, multiply value by 85 then add value of new byte
@@ -170,7 +162,7 @@ func ASCII85Decode(data []byte) ([]byte, error) {
 	}
 }
 
-func RunLengthDecode(data []byte) ([]byte, error) {
+func RunLengthDecode(data []byte) []byte {
 	var decoded_data bytes.Buffer
 	for i := 0; i < len(data); {
 		// get length byte
@@ -212,15 +204,16 @@ func RunLengthDecode(data []byte) ([]byte, error) {
 			i++
 		}
 	}
-	return decoded_data.Bytes(), nil
+	return decoded_data.Bytes()
 }
 
-func FlateDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
+func FlateDecode(data []byte, decode_parms Dictionary) ([]byte, bool) {
 	// create zlib reader from data
 	byte_reader := bytes.NewReader(data)
 	zlib_reader, err := zlib.NewReader(byte_reader)
 	if err != nil {
-		return data, WrapError(err, "FlateDecode")
+		// TODO: log error
+		return data, false
 	}
 	defer zlib_reader.Close()
 
@@ -228,18 +221,19 @@ func FlateDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
 	var decoded_data bytes.Buffer
 	bytes_read, err := decoded_data.ReadFrom(zlib_reader)
 	if bytes_read == 0 && err != nil {
-		return data, WrapError(err, "FlateDecode")
+		// TODO: log error
+		return data, false
 	}
 
 	// reverse predictor
 	return ReversePredictor(decoded_data.Bytes(), decode_parms)
 }
 
-func LZWDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
+func LZWDecode(data []byte, decode_parms Dictionary) ([]byte, bool) {
 	// create lzw reader from data using different implementation based on early change parm
 	var lzw_reader io.ReadCloser
-	early_change, err := decode_parms.GetInt("EarlyChange")
-	if err != nil {
+	early_change, ok := decode_parms.GetInt("EarlyChange")
+	if !ok {
 		early_change = 1
 	}
 	if early_change == 0 {
@@ -253,35 +247,36 @@ func LZWDecode(data []byte, decode_parms Dictionary) ([]byte, error) {
 	var decoded_data bytes.Buffer
 	bytes_read, err := decoded_data.ReadFrom(lzw_reader)
 	if bytes_read == 0 && err != nil {
-		return data, WrapError(err, "LZWDecode")
+		// TODO: log error
+		return data, false
 	}
 
 	// reverse predictor
 	return ReversePredictor(decoded_data.Bytes(), decode_parms)
 }
 
-func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
+func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, bool) {
 	// get predictor parms using default when not found
-	predictor, err := decode_parms.GetInt("Predictor")
-	if err != nil {
+	predictor, ok := decode_parms.GetInt("Predictor")
+	if !ok {
 		predictor = 1
 	}
-	bits_per_component, err := decode_parms.GetInt("BitsPerComponent")
-	if err != nil {
+	bits_per_component, ok := decode_parms.GetInt("BitsPerComponent")
+	if !ok {
 		bits_per_component = 8
 	}
-	colors, err := decode_parms.GetInt("Colors")
-	if err != nil {
+	colors, ok := decode_parms.GetInt("Colors")
+	if !ok {
 		colors = 1
 	}
-	columns, err := decode_parms.GetInt("Columns")
-	if err != nil {
+	columns, ok := decode_parms.GetInt("Columns")
+	if !ok {
 		columns = 1
 	}
 
 	// make sure bits_per_component value is acceptable
 	if bits_per_component <= 0 || bits_per_component > 16 {
-		return data, NewError("Invalid bits_per_component value: %d", bits_per_component)
+		return data, false
 	}
 
 	// determine row widths in bytes
@@ -290,12 +285,12 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 		row_width++
 	}
 	if row_width <= 0 {
-		return data, NewError("Invalid predictor row width: %d", row_width)
+		return data, false
 	}
 
 	// no predictor applied
 	if predictor == 1 {
-		return data, nil
+		return data, true
 	}
 
 	// TIFF predictor
@@ -306,7 +301,7 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 				for i := 0; i < colors; i++ {
 					pos := row_start + ((c * colors + i) * bits_per_component)
 					if pos >= len(data) * 8 {
-						return data, nil
+						return data, true
 					}
 					prev_value := GetBits(data, pos - (colors * bits_per_component), bits_per_component)
 					value := GetBits(data, pos, bits_per_component)
@@ -314,7 +309,7 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 				}
 			}
 		}
-		return data, nil
+		return data, true
 	}
 
 	// PNG predictors
@@ -404,9 +399,9 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, error) {
 				}
 			}
 		}
-		return decoded_data, nil
+		return decoded_data, true
 	}
 
 	// unknown predictor
-	return data, NewError("Predictor not supported: %d", predictor)
+	return data, false
 }

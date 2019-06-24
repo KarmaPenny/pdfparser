@@ -19,76 +19,63 @@ func (d Dictionary) String() string {
 	return s.String()
 }
 
-func (d Dictionary) Contains(key string) bool {
-	_, ok := d[key]
-	return ok
-}
-
-func (d Dictionary) GetArray(key string) (Array, error) {
-	object, err := d.GetObject(key)
-	if err != nil {
-		return Array{}, err
-	}
-	if array, ok := object.(Array); ok {
-		return array, nil
-	}
-	return Array{}, NewError("Expected array")
-}
-
-func (d Dictionary) GetBool(key string) (bool, error) {
-	object, err := d.GetObject(key)
-	if err != nil {
-		return false, err
-	}
-	if keyword, ok := object.(Keyword); ok {
-		if keyword == KEYWORD_TRUE {
-			return true, nil
-		} else if keyword == KEYWORD_FALSE {
-			return false, nil
+func (d Dictionary) GetArray(key string) (Array, bool) {
+	if object, ok := d.GetObject(key); ok {
+		if array, ok := object.(Array); ok {
+			return array, true
 		}
 	}
-	return false, NewError("Expected bool")
+	return Array{}, false
 }
 
-func (d Dictionary) GetBytes(key string) ([]byte, error) {
-	s, err := d.GetString(key)
-	return []byte(s), err
-}
-
-func (d Dictionary) GetDictionary(key string) (Dictionary, error) {
-	object, err := d.GetObject(key)
-	if err != nil {
-		return Dictionary{}, err
+func (d Dictionary) GetBool(key string) (bool, bool) {
+	if object, ok := d.GetObject(key); ok {
+		if keyword, ok := object.(Keyword); ok {
+			if keyword == KEYWORD_TRUE {
+				return true, true
+			} else if keyword == KEYWORD_FALSE {
+				return false, true
+			}
+		}
 	}
-	if dictionary, ok := object.(Dictionary); ok {
-		return dictionary, nil
-	}
-	return Dictionary{}, NewError("Expected dictionary")
+	return false, false
 }
 
-func (d Dictionary) GetInt(key string) (int, error) {
-	number, err := d.GetNumber(key)
-	return int(number), err
+func (d Dictionary) GetBytes(key string) ([]byte, bool) {
+	s, ok := d.GetString(key)
+	return []byte(s), ok
 }
 
-func (d Dictionary) GetInt64(key string) (int64, error) {
-	number, err := d.GetNumber(key)
-	return int64(number), err
+func (d Dictionary) GetDictionary(key string) (Dictionary, bool) {
+	if object, ok := d.GetObject(key); ok {
+		if dictionary, ok := object.(Dictionary); ok {
+			return dictionary, true
+		}
+	}
+	return Dictionary{}, false
 }
 
-func (d Dictionary) GetName(key string) (string, error) {
-	object, err := d.GetObject(key)
-	if err != nil {
-		return "", err
+func (d Dictionary) GetInt(key string) (int, bool) {
+	number, ok := d.GetNumber(key)
+	return int(number), ok
+}
+
+func (d Dictionary) GetInt64(key string) (int64, bool) {
+	number, ok := d.GetNumber(key)
+	return int64(number), ok
+}
+
+func (d Dictionary) GetName(key string) (string, bool) {
+	if object, ok := d.GetObject(key); ok {
+		if name, ok := object.(Name); ok {
+			return string(name), true
+		}
 	}
-	if name, ok := object.(Name); ok {
-		return string(name), nil
-	}
-	return "", NewError("Expected name")
+	return "", false
 }
 
 func (d Dictionary) GetNameTreeMap(key string) Array {
-	if root, err := d.GetDictionary(key); err == nil {
+	if root, ok := d.GetDictionary(key); ok {
 		return root.getNameTreeMap(map[int]interface{}{})
 	}
 	return Array{}
@@ -96,11 +83,11 @@ func (d Dictionary) GetNameTreeMap(key string) Array {
 
 func (d Dictionary) getNameTreeMap(resolved_kids map[int]interface{}) Array {
 	nameTreeMap := Array{}
-	if names, err := d.GetArray("Names"); err == nil {
+	if names, ok := d.GetArray("Names"); ok {
 		// append names to name tree map
 		nameTreeMap = append(nameTreeMap, names...)
 	}
-	if kids, err := d.GetArray("Kids"); err == nil {
+	if kids, ok := d.GetArray("Kids"); ok {
 		for i := range kids {
 			// prevent infinite resolve reference loop
 			if r, ok := kids[i].(*Reference); ok {
@@ -118,54 +105,48 @@ func (d Dictionary) getNameTreeMap(resolved_kids map[int]interface{}) Array {
 	return nameTreeMap
 }
 
-func (d Dictionary) GetNumber(key string) (Number, error) {
-	object, err := d.GetObject(key)
-	if err != nil {
-		return Number(0), err
+func (d Dictionary) GetNumber(key string) (Number, bool) {
+	if object, ok := d.GetObject(key); ok {
+		if number, ok := object.(Number); ok {
+			return number, true
+		}
 	}
-	if number, ok := object.(Number); ok {
-		return number, nil
-	}
-	return Number(0), NewError("Expected number")
+	return Number(0), false
 }
 
-func (d Dictionary) GetObject(key string) (Object, error) {
+func (d Dictionary) GetObject(key string) (Object, bool) {
 	if object, ok := d[key]; ok {
 		if reference, ok := object.(*Reference); ok {
-			return reference.Resolve(), nil
+			return reference.Resolve(), true
 		}
-		return object, nil
+		return object, true
 	}
-	return KEYWORD_NULL, NewError("Dictionary does not contain key: %s", key)
+	return KEYWORD_NULL, false
 }
 
-func (d Dictionary) GetReference(key string) (*Reference, error) {
+func (d Dictionary) GetReference(key string) (*Reference, bool) {
 	if object, ok := d[key]; ok {
 		if reference, ok := object.(*Reference); ok {
-			return reference, nil
+			return reference, true
 		}
-		return nil, NewError("Expected reference")
 	}
-	return nil, NewError("Dictionary does not contain key: %s", key)
+	return nil, false
 }
 
-func (d Dictionary) GetStream(key string) ([]byte, error) {
+func (d Dictionary) GetStream(key string) ([]byte, bool) {
 	if object, ok := d[key]; ok {
 		if reference, ok := object.(*Reference); ok {
-			return reference.ResolveStream(), nil
+			return reference.ResolveStream(), true
 		}
-		return []byte{}, NewError("Expected reference")
 	}
-	return []byte{}, NewError("Dictionary does not contain key: %s", key)
+	return []byte{}, false
 }
 
-func (d Dictionary) GetString(key string) (string, error) {
-	object, err := d.GetObject(key)
-	if err != nil {
-		return "", err
+func (d Dictionary) GetString(key string) (string, bool) {
+	if object, ok := d.GetObject(key); ok {
+		if s, ok := object.(String); ok {
+			return string(s), true
+		}
 	}
-	if s, ok := object.(String); ok {
-		return string(s), nil
-	}
-	return "", NewError("Expected string")
+	return "", false
 }

@@ -25,28 +25,28 @@ func NewFont(d Dictionary) *Font {
 	for {
 		// read next command
 		command, operands, err := parser.ReadCommand()
-		if err == ErrorRead {
+		if err == ReadError {
 			break
 		}
 
 		if command == KEYWORD_BEGIN_BF_RANGE {
 			count, _ := operands.GetInt(len(operands) - 1)
 			for i := 0; i < count; i++ {
-				start_b, err := parser.ReadHexString(noDecryptor)
-				if err != nil {
+				start_b := parser.ReadHexString(noDecryptor)
+				if start_b == "" {
 					break
 				}
 				font.Width = len([]byte(start_b))
 				start := BytesToInt16([]byte(start_b))
 
-				end_b, err := parser.ReadHexString(noDecryptor)
-				if err != nil {
+				end_b := parser.ReadHexString(noDecryptor)
+				if end_b == "" {
 					break
 				}
 				end := BytesToInt16([]byte(end_b))
 
-				value, err := parser.ReadHexString(noDecryptor)
-				if err != nil {
+				value := parser.ReadHexString(noDecryptor)
+				if value == "" {
 					break
 				}
 
@@ -57,15 +57,15 @@ func NewFont(d Dictionary) *Font {
 		} else if command == KEYWORD_BEGIN_BF_CHAR {
 			count, _ := operands.GetInt(len(operands) - 1)
 			for i := 0; i < count; i++ {
-				key_b, err := parser.ReadHexString(noDecryptor)
-				if err != nil {
+				key_b := parser.ReadHexString(noDecryptor)
+				if key_b == "" {
 					break
 				}
 				font.Width = len([]byte(key_b))
 				key := BytesToInt16([]byte(key_b))
 
-				value, err := parser.ReadHexString(noDecryptor)
-				if err != nil {
+				value := parser.ReadHexString(noDecryptor)
+				if value == "" {
 					break
 				}
 
