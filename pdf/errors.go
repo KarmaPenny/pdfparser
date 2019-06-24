@@ -11,6 +11,8 @@ var EncryptionPasswordError = errors.New("incorrect password")
 var EncryptionUnsupported = errors.New("unsupported encryption")
 var EndOfArray = errors.New("end of array")
 var EndOfDictionary = errors.New("end of dictionary")
+var EndOfHexString = errors.New("end of hex string")
+var EndOfString = errors.New("end of string")
 var ReadError = errors.New("read failed")
 
 // format errors and abnormalities
