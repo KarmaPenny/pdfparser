@@ -1,7 +1,6 @@
-package main
+package pdf
 
 import (
-	"github.com/KarmaPenny/pdfparser/pdf"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,7 +23,7 @@ func TestComments(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -48,7 +47,7 @@ func TestEmptyArray(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -72,7 +71,7 @@ func TestEmptyDictionary(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -96,7 +95,7 @@ func TestEncrypted(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -104,7 +103,7 @@ func TestEncrypted(test *testing.T) {
 
 	// test string decryption
 	object := PDF.GetObject(12)
-	d12, ok := object.Value.(pdf.Dictionary)
+	d12, ok := object.Value.(Dictionary)
 	if !ok {
 		test.Fatalf("expected dictionary")
 	}
@@ -128,7 +127,7 @@ func TestFilterASCII85Decode(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -152,7 +151,7 @@ func TestFilterASCIIHexDecode(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -176,7 +175,7 @@ func TestFilterFlateDecode(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -200,7 +199,7 @@ func TestFilterLZWDecode(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -224,7 +223,7 @@ func TestFilterLZWTiffDecode(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -248,7 +247,7 @@ func TestFilterMultiple(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -272,7 +271,7 @@ func TestFilterRunLengthDecode(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -296,7 +295,7 @@ func TestMalformedDictionaryKey(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -306,7 +305,7 @@ func TestMalformedDictionaryKey(test *testing.T) {
 	object := PDF.GetObject(1)
 
 	// assert value is correct
-	if d, ok := object.Value.(pdf.Dictionary); ok {
+	if d, ok := object.Value.(Dictionary); ok {
 		if hidden, err := d.GetString("HiddenObject"); err != nil && string(hidden) != "Hello World" {
 			test.Fatalf("incorrect value %s", string(hidden))
 		}
@@ -322,7 +321,7 @@ func TestNames(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -346,7 +345,7 @@ func TestReference(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -356,7 +355,7 @@ func TestReference(test *testing.T) {
 	object := PDF.GetObject(1)
 
 	// make sure object is a reference
-	reference, ok := object.Value.(*pdf.Reference)
+	reference, ok := object.Value.(*Reference)
 	if !ok {
 		test.Fatal("object is not a reference")
 	}
@@ -387,8 +386,8 @@ func TestReferenceLoop(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -397,7 +396,7 @@ func TestReferenceLoop(test *testing.T) {
 		object := PDF.GetObject(1)
 
 		// make sure object is a reference
-		reference, ok := object.Value.(*pdf.Reference)
+		reference, ok := object.Value.(*Reference)
 		if !ok {
 			test.Fatal("object is not a reference")
 		}
@@ -428,7 +427,7 @@ func TestReferenceNull(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -438,7 +437,7 @@ func TestReferenceNull(test *testing.T) {
 	object := PDF.GetObject(1)
 
 	// make sure object is a reference
-	reference, ok := object.Value.(*pdf.Reference)
+	reference, ok := object.Value.(*Reference)
 	if !ok {
 		test.Fatal("object is not a reference")
 	}
@@ -461,7 +460,7 @@ func TestCarriageReturn(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -485,7 +484,7 @@ func TestStrings(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -495,7 +494,7 @@ func TestStrings(test *testing.T) {
 	object := PDF.GetObject(1)
 
 	// make sure object is an array
-	array, ok := object.Value.(pdf.Array)
+	array, ok := object.Value.(Array)
 	if !ok {
 		test.Fatal("object is not an Array")
 	}
@@ -532,8 +531,8 @@ func TestUnclosedArray(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -572,8 +571,8 @@ func TestUnclosedComment(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -612,8 +611,8 @@ func TestUnclosedDictionary(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -651,8 +650,8 @@ func TestUnclosedDictionaryKey(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -691,8 +690,8 @@ func TestUnclosedHexString(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -731,8 +730,8 @@ func TestUnclosedName(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -771,8 +770,8 @@ func TestUnclosedNameEscape1(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -811,8 +810,8 @@ func TestUnclosedNameEscape2(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -851,8 +850,8 @@ func TestUnclosedString(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -891,8 +890,8 @@ func TestUnclosedStringEscape(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -931,8 +930,8 @@ func TestUnclosedStringOctal1(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -971,8 +970,8 @@ func TestUnclosedStringOctal2(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -1011,8 +1010,8 @@ func TestXrefLoop(test *testing.T) {
 		defer f.Close()
 
 		// load the pdf
-		PDF := pdf.NewParser(f)
-	err = PDF.Load("")
+		PDF := NewParser(f)
+		err = PDF.Load("")
 		if err != nil {
 			test.Fatal(err)
 		}
@@ -1040,7 +1039,7 @@ func TestXrefRepair(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -1069,7 +1068,7 @@ func TestXrefStreamChain(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -1098,7 +1097,7 @@ func TestXrefStreamIndexDefault(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)
@@ -1127,7 +1126,7 @@ func TestXrefTableChain(test *testing.T) {
 	defer f.Close()
 
 	// load the pdf
-	PDF := pdf.NewParser(f)
+	PDF := NewParser(f)
 	err = PDF.Load("")
 	if err != nil {
 		test.Fatal(err)

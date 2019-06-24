@@ -10,19 +10,15 @@ import (
 var password *string
 var extract_dir *string
 
-func main() {
-	// parse cmd args
-	parse_args()
-
-	// parse the pdf
-	err := pdf.Parse(flag.Arg(0), *password, *extract_dir)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-	}
+func usage() {
+	fmt.Fprintln(os.Stderr, "PDF Parser - Decrypts a PDF file and extracts contents")
+	fmt.Fprintf(os.Stderr, "https://github.com/KarmaPenny/pdfparser\n\n")
+	fmt.Fprintf(os.Stderr, "usage: pdfparser [options] input.pdf\n\n")
+	fmt.Fprintln(os.Stderr, "options:")
+	flag.PrintDefaults()
 }
 
-// parse cmd args
-func parse_args() {
+func init() {
 	password = flag.String("p", "", "encryption password (default: empty)")
 	extract_dir = flag.String("o", "", "output directory (default: [input.pdf].extracted)")
 	flag.Usage = usage
@@ -36,11 +32,9 @@ func parse_args() {
 	}
 }
 
-// print help info
-func usage() {
-	fmt.Fprintln(os.Stderr, "PDF Parser - decodes a pdf file")
-	fmt.Fprintf(os.Stderr, "https://github.com/KarmaPenny/pdfparser\n\n")
-	fmt.Fprintf(os.Stderr, "usage: pdfparser [options] input.pdf\n\n")
-	fmt.Fprintln(os.Stderr, "options:")
-	flag.PrintDefaults()
+func main() {
+	err := pdf.Parse(flag.Arg(0), *password, *extract_dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+	}
 }
