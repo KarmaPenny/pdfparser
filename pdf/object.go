@@ -89,8 +89,10 @@ func extract(o Object, output *Output) {
 		}
 
 		// dump page text
-		if t, ok := d.GetName("Type"); ok && t == "Page" {
-			Page(d).Extract(output)
+		if pages, ok := d.GetPageTree("Pages"); ok {
+			for i := range pages {
+				Page(pages[i]).Extract(output)
+			}
 		}
 
 		// dump URIs

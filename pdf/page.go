@@ -67,7 +67,7 @@ func (page Page) Extract(output *Output) {
 						sb.WriteString(string(s))
 					}
 					io.WriteString(output.Text, current_font.Decode([]byte(sb.String())))
-					io.WriteString(output.Text, " <br>\r\n")
+					io.WriteString(output.Text, "\n")
 				}
 			}
 		}

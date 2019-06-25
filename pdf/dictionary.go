@@ -124,6 +124,36 @@ func (d Dictionary) GetObject(key string) (Object, bool) {
 	return KEYWORD_NULL, false
 }
 
+func (d Dictionary) GetPageTree(key string) ([]Dictionary, bool) {
+	if pageTree, ok := d.GetDictionary(key); ok {
+		return pageTree.ResolveKids(map[int]interface{}{}), true
+	}
+	return []Dictionary{}, false
+}
+
+func (d Dictionary) ResolveKids(resolved_kids map[int]interface{}) []Dictionary {
+	kids_list := []Dictionary{d}
+	if kids, ok := d.GetArray("Kids"); ok {
+		for i := range kids {
+			if r, ok := kids[i].(*Reference); ok {
+				// ignore circular references
+				if _, resolved := resolved_kids[r.Number]; resolved {
+					continue
+				}
+				resolved_kids[r.Number] = nil
+
+				// resolve
+				object := r.Resolve()
+				if kid_d, ok := object.(Dictionary); ok {
+					// recursively resolve kids
+					kids_list = append(kids_list, kid_d.ResolveKids(resolved_kids)...)
+				}
+			}
+		}
+	}
+	return kids_list
+}
+
 func (d Dictionary) GetReference(key string) (*Reference, bool) {
 	if object, ok := d[key]; ok {
 		if reference, ok := object.(*Reference); ok {
