@@ -690,7 +690,9 @@ func (parser *Parser) ReadHexString(decryptor Decryptor) String {
 					val, _ := strconv.ParseUint(string(code), 16, 8)
 					s.WriteByte(byte(val))
 				}
-				return String(decryptor.Decrypt([]byte(s.String())))
+				s_data := []byte(s.String())
+				decryptor.Decrypt(s_data)
+				return String(s_data)
 			}
 			if !IsHex(b) {
 				parser.log_error(InvalidHexStringChar)
@@ -975,18 +977,14 @@ func (parser *Parser) ReadStream(decryptor Decryptor, filter_list Array, decode_
 	}
 
 	// decrypt stream
-	stream_data_bytes := decryptor.Decrypt(stream_data.Bytes())
+	stream_data_bytes := stream_data.Bytes()
+	decryptor.Decrypt(stream_data_bytes)
 
 	// decode stream
 	for i := 0; i < len(filter_list); i++ {
 		filter, _ := filter_list.GetName(i)
 		decode_parms, _ := decode_parms_list.GetDictionary(i)
-		if decoded_bytes, ok := DecodeStream(filter, stream_data_bytes, decode_parms); ok {
-			stream_data_bytes = decoded_bytes
-		} else {
-			// stop if decode failed
-			return stream_data_bytes
-		}
+		stream_data_bytes = DecodeStream(filter, stream_data_bytes, decode_parms)
 	}
 
 	// return the decrypted and decoded stream
@@ -1015,7 +1013,9 @@ func (parser *Parser) ReadString(decryptor Decryptor) String {
 		b, err = parser.ReadByte()
 		if err != nil {
 			parser.log_error(UnclosedString)
-			return String(decryptor.Decrypt([]byte(s.String())))
+			s_data := []byte(s.String())
+			decryptor.Decrypt(s_data)
+			return String(s_data)
 		}
 
 		// if this is the start of an escape sequence
@@ -1025,7 +1025,9 @@ func (parser *Parser) ReadString(decryptor Decryptor) String {
 			if err != nil {
 				parser.log_error(UnclosedStringEscape)
 				s.WriteByte('\\')
-				return String(decryptor.Decrypt([]byte(s.String())))
+				s_data := []byte(s.String())
+				decryptor.Decrypt(s_data)
+				return String(s_data)
 			}
 
 			// ignore escaped line breaks \n or \r or \r\n
@@ -1037,7 +1039,9 @@ func (parser *Parser) ReadString(decryptor Decryptor) String {
 				b, err = parser.ReadByte()
 				if err != nil {
 					parser.log_error(UnclosedStringEscape)
-					return String(decryptor.Decrypt([]byte(s.String())))
+					s_data := []byte(s.String())
+					decryptor.Decrypt(s_data)
+					return String(s_data)
 				}
 				// if byte is not a new line then unread it
 				if b != '\n' {
@@ -1122,7 +1126,9 @@ func (parser *Parser) ReadString(decryptor Decryptor) String {
 	}
 
 	// return string
-	return String(decryptor.Decrypt([]byte(s.String())))
+	s_data := []byte(s.String())
+	decryptor.Decrypt(s_data)
+	return String(s_data)
 }
 
 // consumeWhitespace reads until end of whitespace/comments

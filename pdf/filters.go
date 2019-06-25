@@ -11,25 +11,25 @@ import (
 	tiff_lzw "golang.org/x/image/tiff/lzw"
 )
 
-func DecodeStream(filter string, data []byte, decode_parms Dictionary) ([]byte, bool) {
+func DecodeStream(filter string, data []byte, decode_parms Dictionary) []byte {
 	// do nothing if data is empty
 	if len(data) == 0 {
-		return data, true
+		return data
 	}
 
 	// apply hex filter
 	if filter == "ASCIIHexDecode" {
-		return ASCIIHexDecode(data), true
+		return ASCIIHexDecode(data)
 	}
 
 	// apply ascii 85 filter
 	if filter == "ASCII85Decode" {
-		return ASCII85Decode(data), true
+		return ASCII85Decode(data)
 	}
 
 	// apply run length filter
 	if filter == "RunLengthDecode" {
-		return RunLengthDecode(data), true
+		return RunLengthDecode(data)
 	}
 
 	// apply zlib filter
@@ -43,7 +43,7 @@ func DecodeStream(filter string, data []byte, decode_parms Dictionary) ([]byte, 
 	}
 
 	// filter is not supported
-	return data, false
+	return data
 }
 
 func ASCIIHexDecode(data []byte) []byte {
@@ -207,13 +207,12 @@ func RunLengthDecode(data []byte) []byte {
 	return decoded_data.Bytes()
 }
 
-func FlateDecode(data []byte, decode_parms Dictionary) ([]byte, bool) {
+func FlateDecode(data []byte, decode_parms Dictionary) []byte {
 	// create zlib reader from data
 	byte_reader := bytes.NewReader(data)
 	zlib_reader, err := zlib.NewReader(byte_reader)
 	if err != nil {
-		// TODO: log error
-		return data, false
+		return data
 	}
 	defer zlib_reader.Close()
 
@@ -221,15 +220,14 @@ func FlateDecode(data []byte, decode_parms Dictionary) ([]byte, bool) {
 	var decoded_data bytes.Buffer
 	bytes_read, err := decoded_data.ReadFrom(zlib_reader)
 	if bytes_read == 0 && err != nil {
-		// TODO: log error
-		return data, false
+		return data
 	}
 
 	// reverse predictor
 	return ReversePredictor(decoded_data.Bytes(), decode_parms)
 }
 
-func LZWDecode(data []byte, decode_parms Dictionary) ([]byte, bool) {
+func LZWDecode(data []byte, decode_parms Dictionary) []byte {
 	// create lzw reader from data using different implementation based on early change parm
 	var lzw_reader io.ReadCloser
 	early_change, ok := decode_parms.GetInt("EarlyChange")
@@ -247,15 +245,14 @@ func LZWDecode(data []byte, decode_parms Dictionary) ([]byte, bool) {
 	var decoded_data bytes.Buffer
 	bytes_read, err := decoded_data.ReadFrom(lzw_reader)
 	if bytes_read == 0 && err != nil {
-		// TODO: log error
-		return data, false
+		return data
 	}
 
 	// reverse predictor
 	return ReversePredictor(decoded_data.Bytes(), decode_parms)
 }
 
-func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, bool) {
+func ReversePredictor(data []byte, decode_parms Dictionary) []byte {
 	// get predictor parms using default when not found
 	predictor, ok := decode_parms.GetInt("Predictor")
 	if !ok {
@@ -276,7 +273,7 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, bool) {
 
 	// make sure bits_per_component value is acceptable
 	if bits_per_component <= 0 || bits_per_component > 16 {
-		return data, false
+		return data
 	}
 
 	// determine row widths in bytes
@@ -285,12 +282,12 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, bool) {
 		row_width++
 	}
 	if row_width <= 0 {
-		return data, false
+		return data
 	}
 
 	// no predictor applied
 	if predictor == 1 {
-		return data, true
+		return data
 	}
 
 	// TIFF predictor
@@ -301,7 +298,7 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, bool) {
 				for i := 0; i < colors; i++ {
 					pos := row_start + ((c * colors + i) * bits_per_component)
 					if pos >= len(data) * 8 {
-						return data, true
+						return data
 					}
 					prev_value := GetBits(data, pos - (colors * bits_per_component), bits_per_component)
 					value := GetBits(data, pos, bits_per_component)
@@ -309,7 +306,7 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, bool) {
 				}
 			}
 		}
-		return data, true
+		return data
 	}
 
 	// PNG predictors
@@ -399,9 +396,9 @@ func ReversePredictor(data []byte, decode_parms Dictionary) ([]byte, bool) {
 				}
 			}
 		}
-		return decoded_data, true
+		return decoded_data
 	}
 
 	// unknown predictor
-	return data, false
+	return data
 }

@@ -10,13 +10,13 @@ import (
 
 var padding_string []byte = []byte("\x28\xBF\x4E\x5E\x4E\x75\x8A\x41\x64\x00\x4E\x56\xFF\xFA\x01\x08\x2E\x2E\x00\xB6\xD0\x68\x3E\x80\x2F\x0C\xA9\xFE\x64\x53\x69\x7A")
 var noFilter = &CryptFilterNone{}
-var noDecryptor = &DecryptorNone{} 
+var noDecryptor = &DecryptorNone{}
 type CryptFilter interface {
 	NewDecryptor(int, int) Decryptor
 }
 
 type Decryptor interface {
-	Decrypt([]byte) []byte
+	Decrypt([]byte)
 }
 
 // No encryption
@@ -28,9 +28,7 @@ func (c *CryptFilterNone) NewDecryptor(n int, g int) Decryptor {
 
 type DecryptorNone struct {}
 
-func (d *DecryptorNone) Decrypt(data []byte) []byte {
-	return data
-}
+func (d *DecryptorNone) Decrypt(data []byte) {}
 
 // AES
 type CryptFilterAES struct {
@@ -75,12 +73,20 @@ type DecryptorAES struct {
 	encryption_key []byte
 }
 
-func (d *DecryptorAES) Decrypt(data []byte) []byte {
+func (d *DecryptorAES) Decrypt(data []byte) {
+	// catch crypt block panic
+	defer func() {
+		if err := recover(); err != nil {
+			Debug("recovered from panic: %s", err)
+		}
+	}()
+
+	// create new cipher
 	block, _ := aes.NewCipher(d.encryption_key)
 
 	// no data to decrypt, first block is initialization vector
 	if len(data) <= aes.BlockSize {
-		return []byte{}
+		return
 	}
 
 	// set iv to first block and decrypt remaining blocks with cbc decryptor
@@ -88,7 +94,6 @@ func (d *DecryptorAES) Decrypt(data []byte) []byte {
 	data = data[aes.BlockSize:]
 	cbc := cipher.NewCBCDecrypter(block, iv)
 	cbc.CryptBlocks(data, data)
-	return data
 }
 
 // RC4
@@ -131,10 +136,9 @@ type DecryptorRC4 struct {
 	encryption_key []byte
 }
 
-func (d *DecryptorRC4) Decrypt(data []byte) []byte {
+func (d *DecryptorRC4) Decrypt(data []byte) {
 	cipher, _ := rc4.NewCipher(d.encryption_key)
 	cipher.XORKeyStream(data, data)
-	return data
 }
 
 type SecurityHandler struct {
