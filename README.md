@@ -48,8 +48,8 @@ cmd.exe /c hello.exe
 calc.exe
 ```
 
-#### contents.html
-The text content of the PDF is written to the contents.html file.
+#### contents.txt
+The text content of the PDF is written to the contents.txt file.
 
 #### errors.txt
 Format errors and other abnormailites that are sometimes used to obfuscate malicious PDF files are logged to the errors.txt file. Bellow is an example errors.txt file containing the complete list of possible log messages:

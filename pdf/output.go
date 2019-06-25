@@ -55,7 +55,7 @@ func NewOutput(directory string) (output *Output, err error) {
 	}
 
 	// create text content file in output dir
-	if output.Text, err = os.Create(path.Join(directory, "contents.html")); err != nil {
+	if output.Text, err = os.Create(path.Join(directory, "contents.txt")); err != nil {
 		return
 	}
 

@@ -57,7 +57,7 @@ func (page Page) Extract(output *Output) {
 					// decode text with current font font
 					s, _ := operands.GetString(len(operands) - 1)
 					io.WriteString(output.Text, current_font.Decode([]byte(s)))
-					io.WriteString(output.Text, " <br>\r\n")
+					io.WriteString(output.Text, "\n")
 				} else if command == KEYWORD_TEXT_POSITION {
 					// decode positioned text with current font
 					var sb strings.Builder
