@@ -21,8 +21,18 @@ func (page Page) Extract(output *Output) {
 	}
 
 	// get contents
-	contents, _ := d.GetStream("Contents")
+	if contents, ok := d.GetStream("Contents"); ok {
+		page.extract(output, font_map, contents)
+	} else if contents_array, ok := d.GetArray("Contents"); ok {
+		for i := range contents_array {
+			if contents, ok := contents_array.GetStream(i); ok {
+				page.extract(output, font_map, contents)
+			}
+		}
+	}
+}
 
+func (page Page) extract(output *Output, font_map map[string]*Font, contents []byte) {
 	// create parser for parsing contents
 	page_parser := NewParser(bytes.NewReader(contents), nil)
 
