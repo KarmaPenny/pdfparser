@@ -5,16 +5,39 @@ import (
 	"os"
 )
 
-func Parse(file_path string, password string, output_dir string) error {
+type ParseOptions struct {
+	Filename  string
+	Password  string
+	OutputDir string
+	Output    *Output
+}
+
+func Parse(file_path, password, output_dir string) error {
+	return ParseWithOptions(ParseOptions{
+		Filename:  file_path,
+		Password:  password,
+		OutputDir: output_dir,
+	})
+}
+
+func ParseWithOptions(opts ParseOptions) error {
+	if Verbose == nil {
+		Verbose = new(bool)
+	}
 	// open the pdf
-	file, err := os.Open(file_path)
+	file, err := os.Open(opts.Filename)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
 	// create output directory and files
-	output, err := NewOutput(output_dir)
+	var output *Output
+	if opts.Output != nil {
+		output = opts.Output
+	} else {
+		output, err = NewOutput(opts.OutputDir)
+	}
 	defer output.Close()
 	if err != nil {
 		return err
@@ -25,7 +48,7 @@ func Parse(file_path string, password string, output_dir string) error {
 
 	// load the pdf
 	Debug("Loading xref")
-	if err := parser.Load(password); err != nil {
+	if err := parser.Load(opts.Password); err != nil {
 		return err
 	}
 

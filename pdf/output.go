@@ -1,23 +1,43 @@
 package pdf
 
 import (
+	"bytes"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
 )
 
+type bufferCloser struct {
+	bytes.Buffer
+}
+
+func (*bufferCloser) Close() error { return nil }
+
 type Output struct {
-	Commands *os.File
-	Directory string
-	Errors *os.File
-	Files *os.File
-	Javascript *os.File
-	Raw *os.File
-	Text *os.File
-	URLs *os.File
+	Commands   io.ReadWriteCloser
+	Directory  string
+	Errors     io.ReadWriteCloser
+	Files      io.ReadWriteCloser
+	Javascript io.ReadWriteCloser
+	Raw        io.ReadWriteCloser
+	Text       io.ReadWriteCloser
+	URLs       io.ReadWriteCloser
+}
+
+func NewBufferOutput() (output *Output) {
+	output = &Output{}
+	output.Commands = &bufferCloser{}
+	output.Errors = &bufferCloser{}
+	output.Files = &bufferCloser{}
+	output.Javascript = &bufferCloser{}
+	output.Raw = &bufferCloser{}
+	output.Text = &bufferCloser{}
+	output.URLs = &bufferCloser{}
+	return
 }
 
 func NewOutput(directory string) (output *Output, err error) {
