@@ -1,4 +1,4 @@
-module github.com/adamjaso/pdfparser
+module github.com/KarmaPenny/pdfparser
 
 go 1.21.5
 
