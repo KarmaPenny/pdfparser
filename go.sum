@@ -1,0 +1,4 @@
+github.com/KarmaPenny/pdfparser v1.1.0 h1:OMDMZ9b66w2JY0ZP5uuGFl+VVpW9RupU80slp/+/OHA=
+github.com/KarmaPenny/pdfparser v1.1.0/go.mod h1:f8ncLLG7eAU+2nT0S2Lv2o72sKdTX8joJn7X5xreKlo=
+golang.org/x/image v0.15.0 h1:kOELfmgrmJlw4Cdb7g/QGuB3CvDrXbqEIww/pNtNBm8=
+golang.org/x/image v0.15.0/go.mod h1:HUYqC05R2ZcZ3ejNQsIHQDQiwWM4JBqmm6MKANTp4LE=
