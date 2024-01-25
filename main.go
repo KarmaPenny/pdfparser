@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/adamjaso/pdfparser/pdf"
+	"github.com/KarmaPenny/pdfparser/pdf"
 )
 
 var overwrite *bool
